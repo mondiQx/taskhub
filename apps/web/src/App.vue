@@ -3,19 +3,30 @@ import { computed, onMounted, ref } from "vue";
 import { useTaskStore } from "./stores/taskStore";
 import { useNotifications } from "./composables/useNotifications";
 import KanbanView from "./views/KanbanView.vue";
-import ListView from "./views/ListView.vue";
 import PostItView from "./views/PostItView.vue";
-import TaskDetailDrawer from "./components/TaskDetailDrawer.vue";
+import GraphView from "./views/GraphView.vue";
+import TaskModal from "./components/TaskModal.vue";
+import NoteModal from "./components/NoteModal.vue";
 
 const store = useTaskStore();
 const notifications = useNotifications();
 
-type ViewMode = "postit" | "kanban" | "list";
+type ViewMode = "postit" | "kanban" | "graph";
 const view = ref<ViewMode>("postit");
 const groupBy = ref<"priority" | "time">("time");
 const openTaskId = ref<string | null>(null);
+const openNote = ref<{ folder: string; id: string } | null>(null);
 
 const openTask = computed(() => store.tasks.find((t) => t.id === openTaskId.value) ?? null);
+
+function openTaskFromNote(taskId: string) {
+  openNote.value = null;
+  openTaskId.value = taskId;
+}
+function openNoteFromNote(folder: string, id: string) {
+  openTaskId.value = null;
+  openNote.value = { folder, id };
+}
 
 onMounted(() => {
   store.init();
@@ -29,7 +40,7 @@ onMounted(() => {
       <nav class="view-switch">
         <button :class="{ active: view === 'postit' }" @click="view = 'postit'">Post-its</button>
         <button :class="{ active: view === 'kanban' }" @click="view = 'kanban'">Kanban</button>
-        <button :class="{ active: view === 'list' }" @click="view = 'list'">List</button>
+        <button :class="{ active: view === 'graph' }" @click="view = 'graph'">Graph</button>
       </nav>
       <div class="right">
         <select v-if="view === 'kanban'" v-model="groupBy">
@@ -43,14 +54,16 @@ onMounted(() => {
       </div>
     </header>
 
-    <main :class="{ 'no-scroll': view === 'kanban' }">
+    <main :class="{ 'no-scroll': view === 'kanban' || view === 'graph' }">
       <PostItView v-if="view === 'postit'" @open="openTaskId = $event" />
       <KanbanView v-else-if="view === 'kanban'" :group-by="groupBy" @open="openTaskId = $event" />
-      <ListView v-else @open="openTaskId = $event" />
+      <GraphView v-else @open="openTaskId = $event" @open-note="(folder, id) => (openNote = { folder, id })" />
     </main>
 
-    <TaskDetailDrawer
+    <TaskModal
+      v-if="openTask"
       :task="openTask"
+      mode="edit"
       @close="openTaskId = null"
       @complete="store.complete"
       @reopen="store.reopen"
@@ -60,6 +73,18 @@ onMounted(() => {
       "
       @set-due="(id, due) => store.patch(id, { due })"
       @set-tags="(id, tags) => store.patch(id, { tags })"
+      @set-priority="(id, priority) => store.patch(id, { priority })"
+      @set-title="(id, title) => store.patch(id, { title })"
+      @set-body="(id, body) => store.patch(id, { body })"
+    />
+
+    <NoteModal
+      v-if="openNote"
+      :folder="openNote.folder"
+      :id="openNote.id"
+      @close="openNote = null"
+      @open-task="openTaskFromNote"
+      @open-note="openNoteFromNote"
     />
   </div>
 </template>

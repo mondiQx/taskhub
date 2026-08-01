@@ -1,12 +1,35 @@
 import { Router } from "express";
 import { taskRepository } from "../vault/taskRepository.js";
 import { calendarCache } from "../reminders/calendarCache.js";
+import { buildVaultGraph, readVaultFile, resolveVaultId } from "../vault/graph.js";
 import type { NewTaskInput } from "../types.js";
 
 export const router = Router();
 
 router.get("/calendar/events", (_req, res) => {
   res.json(calendarCache.list());
+});
+
+router.get("/graph", async (_req, res) => {
+  res.json(await buildVaultGraph());
+});
+
+router.get("/vault/resolve/:id", async (req, res) => {
+  const resolved = await resolveVaultId(req.params.id);
+  if (!resolved) {
+    res.status(404).json({ error: "not found" });
+    return;
+  }
+  res.json(resolved);
+});
+
+router.get("/vault/:folder/:id", async (req, res) => {
+  const file = await readVaultFile(req.params.folder, req.params.id);
+  if (!file) {
+    res.status(404).json({ error: "not found" });
+    return;
+  }
+  res.json(file);
 });
 
 router.get("/tasks", (_req, res) => {

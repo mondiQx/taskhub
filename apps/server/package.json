@@ -6,7 +6,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
-    "setup:google": "tsx src/auth/setup-google.ts"
+    "setup:google": "tsx src/auth/setup-google.ts",
+    "calendar:range": "tsx src/scripts/fetch-events-range.ts"
   },
   "dependencies": {
     "chokidar": "^4.0.1",
