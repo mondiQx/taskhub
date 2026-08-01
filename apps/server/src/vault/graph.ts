@@ -4,6 +4,14 @@ import matter from "gray-matter";
 import { config } from "../config.js";
 
 const FOLDERS = ["tasks", "notes", "meetings", "journal", "reports"];
+
+// Within vault/notes/, color by frontmatter `type` so people/meeting-hubs/initiative-hubs
+// are visually distinct in the graph even though they all share the "notes" folder color.
+const NOTE_TYPE_COLORS: Record<string, string> = {
+  person: "#b0559e",
+  "meeting-hub": "#3d6ba8",
+  hub: "#4a7c59",
+};
 const WIKILINK = /\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]+)?\]\]/g;
 
 export interface GraphNode {
@@ -12,6 +20,7 @@ export interface GraphNode {
   folder: string;
   taskId?: string; // set for nodes in vault/tasks/, the frontmatter task id (not the filename)
   color?: string; // overrides the folder's default color, e.g. urgency gradient on Kanban time buckets
+  status?: string; // task status (open/in-progress/done/archived), set for nodes in vault/tasks/
 }
 
 export interface GraphEdge {
@@ -158,6 +167,11 @@ export async function buildVaultGraph(): Promise<{ nodes: GraphNode[]; edges: Gr
     const label = typeof f.fm.title === "string" ? f.fm.title : f.id;
     const node: GraphNode = { id: f.id, label, folder: f.folder };
     if (f.folder === "tasks" && typeof f.fm.id === "string") node.taskId = f.fm.id;
+    if (f.folder === "tasks" && typeof f.fm.status === "string") node.status = f.fm.status;
+    if (f.folder === "notes") {
+      const color = NOTE_TYPE_COLORS[f.fm.type as string];
+      if (color) node.color = color;
+    }
     nodes.set(f.id, node);
     if (f.linkTargets.length) links.set(f.id, f.linkTargets);
   }
@@ -205,12 +219,18 @@ export async function buildVaultGraph(): Promise<{ nodes: GraphNode[]; edges: Gr
   }
 
   // Recurring-meeting grouping: a hub note with recurring:true collapses every
-  // meeting instance it links to into the hub node itself (one node per series).
+  // meeting instance IN ITS SERIES into the hub node itself (one node per series).
+  // A meeting only counts as "in the series" if its slug (date prefix stripped)
+  // matches the hub id — otherwise a recurring hub merely linking to a one-off
+  // meeting for context (e.g. ai-initiative referencing the MCP discussion) would
+  // wrongly swallow that unrelated meeting too.
   const mergedInto = new Map<string, string>(); // meeting node id -> hub id it merges into
   for (const f of files) {
-    if (f.folder !== "notes" || f.fm.type !== "hub" || f.fm.recurring !== true) continue;
+    if (f.folder !== "notes" || (f.fm.type !== "hub" && f.fm.type !== "meeting-hub") || f.fm.recurring !== true) continue;
     for (const target of f.linkTargets) {
-      if (nodes.get(target)?.folder === "meetings") mergedInto.set(target, f.id);
+      if (nodes.get(target)?.folder !== "meetings") continue;
+      const slug = target.replace(/^\d{4}-\d{2}-\d{2}-/, "");
+      if (slug === f.id || slug.startsWith(`${f.id}-`)) mergedInto.set(target, f.id);
     }
   }
   for (const meetingId of mergedInto.keys()) nodes.delete(meetingId);

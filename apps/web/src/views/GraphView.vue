@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
+import { useTaskStore } from "../stores/taskStore";
 
 const emit = defineEmits<{ open: [id: string]; "open-note": [folder: string, id: string] }>();
+
+const taskStore = useTaskStore();
 
 interface GraphNode {
   id: string;
@@ -9,6 +12,7 @@ interface GraphNode {
   folder: string;
   taskId?: string;
   color?: string;
+  status?: string;
   x: number;
   y: number;
   vx: number;
@@ -28,6 +32,14 @@ const FOLDER_COLORS: Record<string, string> = {
   category: "#5b5b5b",
 };
 
+// Mirrors NOTE_TYPE_COLORS in apps/server/src/vault/graph.ts — labels only, not
+// toggleable like the folder legend (notes of any type still live in "notes").
+const NOTE_TYPE_LEGEND: { label: string; color: string }[] = [
+  { label: "person", color: "#b0559e" },
+  { label: "meeting-hub", color: "#3d6ba8" },
+  { label: "initiative/team hub", color: "#4a7c59" },
+];
+
 const canvasRef = ref<HTMLCanvasElement>();
 const nodes = ref<GraphNode[]>([]);
 const edges = ref<GraphEdge[]>([]);
@@ -37,6 +49,8 @@ const activeFolders = ref(new Set(Object.keys(FOLDER_COLORS)));
 let ctx: CanvasRenderingContext2D | null = null;
 let raf = 0;
 let dragging: GraphNode | null = null;
+let dragStart = { x: 0, y: 0 };
+let dragMoved = false;
 let panX = 0;
 let panY = 0;
 
@@ -64,7 +78,9 @@ function step() {
       const b = nodes.value[j];
       const dx = a.x - b.x;
       const dy = a.y - b.y;
-      const distSq = Math.max(dx * dx + dy * dy, 1);
+      // Clamped well above 0 so near-coincident nodes (e.g. right after load) repel firmly
+      // instead of producing a near-infinite force spike on the first few frames.
+      const distSq = Math.max(dx * dx + dy * dy, 100);
       const force = 1800 / distSq;
       const dist = Math.sqrt(distSq);
       const fx = (dx / dist) * force;
@@ -95,12 +111,22 @@ function step() {
 
   // gentle pull to center + damping + integrate
   const margin = 24;
+  const maxSpeed = 8;
   for (const n of nodes.value) {
     if (n === dragging) continue;
     n.vx += (cx - n.x) * 0.001;
     n.vy += (cy - n.y) * 0.001;
     n.vx *= 0.85;
     n.vy *= 0.85;
+
+    // Speed cap keeps the initial settle calm — without it, nodes that start
+    // stacked on top of each other can rocket across the canvas on frame one.
+    const speed = Math.hypot(n.vx, n.vy);
+    if (speed > maxSpeed) {
+      n.vx = (n.vx / speed) * maxSpeed;
+      n.vy = (n.vy / speed) * maxSpeed;
+    }
+
     n.x += n.vx;
     n.y += n.vy;
 
@@ -120,7 +146,11 @@ function draw() {
   if (!canvas || !ctx) return;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  const visible = new Set(nodes.value.filter((n) => activeFolders.value.has(n.folder)).map((n) => n.id));
+  const visible = new Set(
+    nodes.value
+      .filter((n) => activeFolders.value.has(n.folder) && (taskStore.showDone || n.status !== "done"))
+      .map((n) => n.id),
+  );
   const byId = new Map(nodes.value.map((n) => [n.id, n]));
 
   ctx.strokeStyle = "rgba(120,110,95,0.35)";
@@ -172,7 +202,7 @@ function draw() {
 function nodeAt(x: number, y: number): GraphNode | null {
   for (let i = nodes.value.length - 1; i >= 0; i--) {
     const n = nodes.value[i];
-    if (!activeFolders.value.has(n.folder)) continue;
+    if (!activeFolders.value.has(n.folder) || (!taskStore.showDone && n.status === "done")) continue;
     const dx = n.x - x;
     const dy = n.y - y;
     if (dx * dx + dy * dy < 15 * 15) return n;
@@ -185,14 +215,23 @@ function toLocal(evt: MouseEvent) {
   return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
 }
 
+const DRAG_THRESHOLD = 4;
+
 function onMouseDown(evt: MouseEvent) {
   const { x, y } = toLocal(evt);
   dragging = nodeAt(x, y);
+  dragStart = { x, y };
+  dragMoved = false;
 }
 
 function onMouseMove(evt: MouseEvent) {
   const { x, y } = toLocal(evt);
   if (dragging) {
+    if (!dragMoved) {
+      const dx = x - dragStart.x;
+      const dy = y - dragStart.y;
+      if (dx * dx + dy * dy > DRAG_THRESHOLD * DRAG_THRESHOLD) dragMoved = true;
+    }
     dragging.x = x;
     dragging.y = y;
     dragging.vx = 0;
@@ -208,6 +247,10 @@ function onMouseUp() {
 }
 
 function onClick(evt: MouseEvent) {
+  if (dragMoved) {
+    dragMoved = false;
+    return;
+  }
   const { x, y } = toLocal(evt);
   const n = nodeAt(x, y);
   if (!n) return;
@@ -220,17 +263,26 @@ function toggleFolder(folder: string) {
   else activeFolders.value.add(folder);
 }
 
+// Golden-angle spiral — spreads nodes out from the center with no overlap and no
+// randomness, so the physics starts from a calm, evenly-distributed layout instead
+// of a tight random cluster that explodes outward once the sim kicks in.
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+
 async function load() {
   const res = await fetch("/api/graph");
   const data: { nodes: Omit<GraphNode, "x" | "y" | "vx" | "vy">[]; edges: GraphEdge[] } = await res.json();
   const canvas = canvasRef.value!;
-  nodes.value = data.nodes.map((n) => ({
-    ...n,
-    x: canvas.width / 2 + (Math.random() - 0.5) * 200,
-    y: canvas.height / 2 + (Math.random() - 0.5) * 200,
-    vx: 0,
-    vy: 0,
-  }));
+  nodes.value = data.nodes.map((n, i) => {
+    const r = 8 * Math.sqrt(i + 1);
+    const theta = i * GOLDEN_ANGLE;
+    return {
+      ...n,
+      x: canvas.width / 2 + r * Math.cos(theta),
+      y: canvas.height / 2 + r * Math.sin(theta),
+      vx: 0,
+      vy: 0,
+    };
+  });
   edges.value = data.edges;
 }
 
@@ -270,6 +322,12 @@ onBeforeUnmount(() => {
         {{ folder }}
         <span class="count">{{ nodes.filter((n) => n.folder === folder).length }}</span>
       </button>
+      <div class="legend-subgroup">
+        <span v-for="t in NOTE_TYPE_LEGEND" :key="t.label" class="legend-item sub">
+          <span class="dot" :style="{ background: t.color }" />
+          {{ t.label }}
+        </span>
+      </div>
     </div>
   </div>
 </template>
@@ -286,6 +344,8 @@ canvas { display: block; width: 100%; height: 100%; }
   padding: 0.1rem 0; color: #2f2a24; text-transform: capitalize;
 }
 .legend-item.off { opacity: 0.35; }
+.legend-item.sub { cursor: default; font-size: 0.75rem; opacity: 0.85; }
+.legend-subgroup { display: flex; flex-direction: column; gap: 0.3rem; padding-left: 0.9rem; border-left: 2px solid rgba(47,42,36,0.15); margin-left: 0.15rem; }
 .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .count { margin-left: auto; opacity: 0.6; }
 </style>

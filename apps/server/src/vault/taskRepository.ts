@@ -73,6 +73,15 @@ class TaskRepository extends EventEmitter {
     return this.update(id, { status: "open", completedAt: null }, { event: "reopened", note });
   }
 
+  async delete(id: string): Promise<void> {
+    const existing = this.tasks.get(id);
+    if (!existing) throw new Error(`Task ${id} not found`);
+    await fs.unlink(existing.filePath);
+    this.tasks.delete(id);
+    this.byFilePath.delete(existing.filePath);
+    this.emit("change", { type: "removed", id } satisfies TaskChangeEvent);
+  }
+
   /** Reconciles an externally-changed file (edited in Obsidian, or written by the sync-inbox skill). */
   async reconcileFile(filePath: string): Promise<void> {
     try {

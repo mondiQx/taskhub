@@ -45,14 +45,17 @@ function onDragStart(e: DragEvent) {
 <style scoped>
 .task-card {
   display: flex;
-  gap: 0.5rem;
-  padding: 0.6rem 0.75rem;
-  border-radius: 8px;
-  background: var(--card-bg, #fffbe6);
+  gap: var(--space-2);
+  padding: 0.6rem var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--card-bg, var(--color-surface));
   border-left: 4px solid var(--accent, #e0c341);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-sm);
   cursor: pointer;
+  transition: transform 140ms var(--ease), box-shadow 140ms var(--ease);
 }
+.task-card:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.task-card:active { transform: translateY(0); box-shadow: var(--shadow-sm); }
 .priority-urgent { border-left-color: #e5484d; }
 .priority-high { border-left-color: #f5a524; }
 .priority-medium { border-left-color: #e0c341; }
@@ -60,6 +63,6 @@ function onDragStart(e: DragEvent) {
 .done { opacity: 0.55; text-decoration: line-through; }
 .body { flex: 1; min-width: 0; }
 .title { font-weight: 600; font-size: 0.9rem; word-break: break-word; }
-.meta { display: flex; gap: 0.5rem; font-size: 0.75rem; opacity: 0.75; margin-top: 0.25rem; }
+.meta { display: flex; gap: var(--space-2); font-size: 0.75rem; opacity: 0.75; margin-top: var(--space-1); }
 .due.overdue { color: #e5484d; font-weight: 600; }
 </style>

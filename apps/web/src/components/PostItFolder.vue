@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { motion } from "motion-v";
 
-defineProps<{ label: string; count: number; expanded?: boolean }>();
+const props = defineProps<{ label: string; count: number; previews?: string[]; expanded?: boolean }>();
 defineEmits<{ toggle: [] }>();
+
+const SLOTS = 4;
 </script>
 
 <template>
@@ -10,76 +12,84 @@ defineEmits<{ toggle: [] }>();
     class="folder"
     :class="{ expanded }"
     layout
-    :while-hover="{ y: -3 }"
-    :while-tap="{ scale: 0.96 }"
-    :transition="{ type: 'spring', stiffness: 400, damping: 28 }"
+    :while-hover="{ scale: 1.04 }"
+    :while-tap="{ scale: 0.95 }"
+    :transition="{ type: 'spring', stiffness: 420, damping: 30 }"
     @click="$emit('toggle')"
   >
-    <span class="tab"></span>
-    <span class="stack">
-      <span class="card card-3"></span>
-      <span class="card card-2"></span>
-      <span class="card card-1"></span>
+    <span class="tile">
+      <span v-for="i in SLOTS" :key="i" class="chip" :style="{ background: previews?.[i - 1] ?? 'rgba(var(--shadow-tint), 0.12)' }" />
+      <span class="badge">{{ count }}</span>
     </span>
     <p class="label">{{ label }}</p>
-    <span class="count">
-      <motion.span class="chevron" :animate="{ rotate: expanded ? 180 : 0 }">▾</motion.span>
-      {{ count }} note{{ count === 1 ? "" : "s" }}
-    </span>
   </motion.button>
 </template>
 
 <style scoped>
 .folder {
   position: relative;
-  aspect-ratio: 1;
-  padding: 0.85rem 0.75rem 0.75rem;
-  margin-top: 8px;
-  border-radius: 3px 8px 8px 8px;
-  border: 1px solid rgba(0, 0, 0, 0.25);
-  background: #e3d6ab;
-  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.12), 0 4px 10px rgba(0, 0, 0, 0.18);
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0;
+  border: none;
+  background: none;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 0.4rem;
   font-family: inherit;
 }
-.tab {
-  position: absolute;
-  top: -8px;
-  left: 10px;
-  width: 42%;
-  height: 9px;
-  background: #e3d6ab;
-  border: 1px solid rgba(0, 0, 0, 0.25);
-  border-bottom: none;
-  border-radius: 5px 5px 0 0;
+.tile {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 22%;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.15)), rgba(var(--shadow-tint), 0.09);
+  border: 1px solid rgba(var(--shadow-tint), 0.14);
+  box-shadow: var(--shadow-sm);
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 8%;
+  padding: 12%;
+  box-sizing: border-box;
+  transition: box-shadow 160ms var(--ease), border-color 160ms var(--ease);
 }
-.folder:hover { background: #dccb98; }
-.folder:hover .tab { background: #dccb98; }
-.folder.expanded { background: #cdb87e; border-color: rgba(0, 0, 0, 0.4); }
-.folder.expanded .tab { background: #cdb87e; border-color: rgba(0, 0, 0, 0.4); }
-.stack { position: relative; width: 42px; height: 34px; }
-.card {
-  position: absolute;
-  width: 28px;
-  height: 22px;
-  border-radius: 3px;
-  border: 1px solid rgba(0, 0, 0, 0.15);
+.folder:hover .tile { box-shadow: var(--shadow-md); }
+.folder.expanded .tile {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px rgba(193, 103, 58, 0.25), var(--shadow-md);
 }
-.card-3 { top: 8px; left: 8px; background: #b3e5fc; }
-.card-2 { top: 4px; left: 4px; background: #c8e6c9; }
-.card-1 { top: 0; left: 0; background: #fff59d; }
+.chip {
+  border-radius: 28%;
+  box-shadow: 0 1px 2px rgba(var(--shadow-tint), 0.18) inset;
+}
+.badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--color-accent);
+  color: white;
+  font-size: 0.68rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-sm);
+}
 .label {
-  font-size: 0.85rem;
-  font-weight: 700;
+  font-size: 0.78rem;
+  font-weight: 500;
   text-align: center;
   word-break: break-word;
   margin: 0;
+  color: var(--color-ink);
+  line-height: 1.25;
 }
-.count { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.7rem; opacity: 0.75; }
-.chevron { display: inline-block; }
 </style>

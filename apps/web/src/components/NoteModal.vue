@@ -76,44 +76,52 @@ watch(
 .backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(var(--shadow-tint), 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 50;
-  padding: 1rem;
+  padding: var(--space-4);
 }
 .panel {
   position: relative;
-  background: var(--drawer-bg, #fff);
-  border-radius: 8px;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
-  padding: 1.5rem;
-  width: 560px;
+  background: var(--drawer-bg, var(--color-surface));
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-5);
+  width: clamp(560px, 50vw, 920px);
   max-width: 100%;
-  max-height: 85vh;
+  max-height: 90vh;
   overflow-y: auto;
 }
 .close {
   position: absolute;
-  top: 0.5rem;
-  right: 0.75rem;
+  top: var(--space-2);
+  right: var(--space-3);
   border: none;
   background: none;
   font-size: 1.5rem;
+  line-height: 1;
   cursor: pointer;
+  color: var(--color-ink-soft);
+  border-radius: 999px;
+  width: 2rem;
+  height: 2rem;
+  transition: background 140ms var(--ease), color 140ms var(--ease);
 }
+.close:hover { background: rgba(var(--shadow-tint), 0.08); color: var(--color-ink); }
 .folder-tag { font-size: 0.7rem; text-transform: uppercase; opacity: 0.5; margin: 0 0 0.15rem; letter-spacing: 0.05em; }
-h2 { margin: 0 0 0.75rem; padding-right: 1.5rem; }
+h2 { margin: 0 0 var(--space-3); padding-right: var(--space-5); font-weight: 600; letter-spacing: -0.01em; font-size: clamp(1.15rem, 0.9rem + 0.6vw, 1.5rem); }
 .hint { font-size: 0.85rem; opacity: 0.6; }
+.markdown-body { font-size: clamp(0.95rem, 0.85rem + 0.2vw, 1.05rem); max-width: 68ch; }
 .markdown-body :deep(h1),
 .markdown-body :deep(h2),
 .markdown-body :deep(h3) { margin: 1rem 0 0.4rem; }
-.markdown-body :deep(p) { margin: 0.5rem 0; line-height: 1.5; }
+.markdown-body :deep(p) { margin: 0.5rem 0; line-height: 1.6; }
 .markdown-body :deep(ul),
 .markdown-body :deep(ol) { padding-inline-start: 1.25rem; }
-.markdown-body :deep(li) { margin: 0.2rem 0; line-height: 1.45; }
+.markdown-body :deep(li) { margin: 0.2rem 0; line-height: 1.5; }
 .markdown-body :deep(a) { color: #2f6fbf; }
-.markdown-body :deep(code) { background: rgba(0, 0, 0, 0.06); padding: 0.05rem 0.3rem; border-radius: 4px; font-size: 0.85em; }
-.markdown-body :deep(pre) { background: rgba(0, 0, 0, 0.06); padding: 0.6rem; border-radius: 6px; overflow-x: auto; }
+.markdown-body :deep(code) { background: rgba(var(--shadow-tint), 0.08); padding: 0.05rem 0.3rem; border-radius: 4px; font-size: 0.85em; }
+.markdown-body :deep(pre) { background: rgba(var(--shadow-tint), 0.08); padding: 0.6rem; border-radius: var(--radius-sm); overflow-x: auto; }
 </style>

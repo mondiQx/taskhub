@@ -1,14 +1,11 @@
 <script setup lang="ts">
 import type { Task } from "../types";
+import { colorForId } from "../utils/noteColor";
 
 const props = defineProps<{ task: Task }>();
 const emit = defineEmits<{ complete: [id: string]; reopen: [id: string]; open: [id: string] }>();
 
-const colors = ["#fff59d", "#ffccbc", "#c8e6c9", "#b3e5fc", "#e1bee7"];
-function colorFor(id: string) {
-  const hash = [...id].reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
-  return colors[hash % colors.length];
-}
+const colorFor = colorForId;
 </script>
 
 <template>
@@ -32,16 +29,19 @@ function colorFor(id: string) {
 <style scoped>
 .note {
   aspect-ratio: 1;
-  padding: 0.75rem;
-  border-radius: 4px;
-  box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.15);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  box-shadow: 2px 3px 8px rgba(var(--shadow-tint), 0.2);
   transform: rotate(-1deg);
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
+  transition: transform 160ms var(--ease), box-shadow 160ms var(--ease);
 }
 .note:nth-child(even) { transform: rotate(1deg); }
+.note:hover { transform: rotate(0deg) translateY(-2px); box-shadow: 3px 6px 14px rgba(var(--shadow-tint), 0.28); }
+.note:active { transform: rotate(0deg) translateY(0); }
 .note.done { opacity: 0.5; text-decoration: line-through; }
 .note p { font-size: 0.9rem; font-weight: 600; word-break: break-word; }
 </style>

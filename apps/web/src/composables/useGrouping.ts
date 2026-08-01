@@ -107,9 +107,6 @@ export function groupByTimePeriod(tasks: Task[], now = new Date()): Array<{ key:
   }));
 }
 
-/** Buckets that default to a collapsed "folder" view since they aren't time-critical. */
-export const FOLDED_TIME_BUCKETS: ReadonlySet<TimeBucket> = new Set(["deferred", "someday"]);
-
 /**
  * Category for grouping regardless of due date — e.g. Jira tickets by project/board
  * (from the "jira" + project tags the sync writes), everything else by its first tag

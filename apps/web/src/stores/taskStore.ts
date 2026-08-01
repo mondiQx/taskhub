@@ -4,14 +4,19 @@ import type { Task } from "../types";
 interface State {
   tasks: Task[];
   connected: boolean;
+  showDone: boolean;
 }
 
 let socket: WebSocket | undefined;
 
 export const useTaskStore = defineStore("tasks", {
-  state: (): State => ({ tasks: [], connected: false }),
+  state: (): State => ({ tasks: [], connected: false, showDone: true }),
 
   actions: {
+    toggleShowDone() {
+      this.showDone = !this.showDone;
+    },
+
     async init() {
       const res = await fetch("/api/tasks");
       this.tasks = await res.json();
@@ -76,6 +81,11 @@ export const useTaskStore = defineStore("tasks", {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ note }),
       });
+    },
+
+    async deleteTask(id: string) {
+      await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+      this.tasks = this.tasks.filter((t) => t.id !== id);
     },
 
     async patch(id: string, patch: Partial<Task>) {

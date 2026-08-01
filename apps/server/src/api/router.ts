@@ -2,12 +2,17 @@ import { Router } from "express";
 import { taskRepository } from "../vault/taskRepository.js";
 import { calendarCache } from "../reminders/calendarCache.js";
 import { buildVaultGraph, readVaultFile, resolveVaultId } from "../vault/graph.js";
+import { listVaultMeetings } from "../vault/meetingsRepository.js";
 import type { NewTaskInput } from "../types.js";
 
 export const router = Router();
 
 router.get("/calendar/events", (_req, res) => {
   res.json(calendarCache.list());
+});
+
+router.get("/meetings", async (_req, res) => {
+  res.json(await listVaultMeetings());
 });
 
 router.get("/graph", async (_req, res) => {
@@ -50,6 +55,15 @@ router.patch("/tasks/:id", async (req, res) => {
   try {
     const task = await taskRepository.update(req.params.id, req.body, { event: "updated" });
     res.json(task);
+  } catch (err) {
+    res.status(404).json({ error: (err as Error).message });
+  }
+});
+
+router.delete("/tasks/:id", async (req, res) => {
+  try {
+    await taskRepository.delete(req.params.id);
+    res.status(204).end();
   } catch (err) {
     res.status(404).json({ error: (err as Error).message });
   }
