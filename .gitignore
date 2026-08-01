@@ -1,0 +1,23 @@
+node_modules/
+dist/
+.env
+.credentials/
+vault/.obsidian/workspace*
+vault/.obsidian/plugins/
+.DS_Store
+*.log
+
+# Vault content is personal/local data (tasks, notes, synced Gmail/Jira/Calendar
+# material) — keep the folder structure tracked via .gitkeep, but never the
+# actual files.
+vault/tasks/*
+vault/notes/*
+vault/journal/*
+vault/reports/*
+vault/meetings/*
+!vault/tasks/.gitkeep
+!vault/notes/.gitkeep
+!vault/journal/.gitkeep
+!vault/reports/.gitkeep
+!vault/meetings/.gitkeep
+*.tsbuildinfo
