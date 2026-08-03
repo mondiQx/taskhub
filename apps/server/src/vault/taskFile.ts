@@ -31,9 +31,19 @@ function stripHistorySection(body: string): string {
   return body.replace(/\n?##\s*History[\s\S]*$/, "").trimEnd();
 }
 
+/** gray-matter's YAML parser turns unquoted ISO-date-like scalars into Date objects; flatten them back to strings so all consumers can rely on `created`/`due`/etc. being strings. */
+function stringifyDates(value: unknown): unknown {
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value)) return value.map(stringifyDates);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, stringifyDates(v)]));
+  }
+  return value;
+}
+
 export function parseTaskFile(filePath: string, raw: string): Task {
   const parsed = matter(raw);
-  const fm = parsed.data as Omit<Task, "body" | "filePath">;
+  const fm = stringifyDates(parsed.data) as Omit<Task, "body" | "filePath">;
   return {
     ...fm,
     body: stripHistorySection(parsed.content.trim()),
