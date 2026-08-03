@@ -65,6 +65,22 @@ syncs) should be sampled, not captured instance-by-instance.
    rule for this skill — same spirit as `sync-inbox`'s
    `source.externalId` check, just keyed on title+date instead.
 
+   **Enrich, don't skip, a `sync-calendar`-created file.** `sync-calendar`
+   caches every calendar event into `vault/meetings/` too, but its body is
+   just the raw calendar description (often empty, or just a Zoom link) —
+   check for `source: gcal` in the frontmatter with no existing
+   `notetakerSource` field as the signal that a file is calendar-only. If
+   you find real Fireflies/Gemini content for a meeting that already has
+   one of these thin files (match on title + date/recurringEventId, not
+   just exact filename), **update that same file in place**: keep its
+   existing frontmatter (`eventId`, `recurringEventId`, `hub`,
+   `source: gcal`, `url`, any `## Participants`/`## Related` links already
+   added), replace the body with the real write-up, and add
+   `notetakerSource: fireflies|gemini` to the frontmatter so future runs
+   know it's already been enriched. Never create a second file for a
+   meeting that already has a `sync-calendar` cache file — same dedup key
+   (title + date), just a richer body.
+
 2. **Search Gmail** per the patterns above, back to whatever date range
    the user asks for (default: since the start of the current year if
    unspecified). Group results by meeting series (same recurring title) vs
@@ -81,11 +97,23 @@ syncs) should be sampled, not captured instance-by-instance.
    confirm/annotate recurrence — merge that into the meeting note rather
    than leaving attendees as "unknown".
 
-5. **Write meeting files** — one per instance fetched, under
-   `vault/meetings/YYYY-MM-DD-<slug>.md`, minimal frontmatter (title, date,
-   source: fireflies|gemini|manual, attendees if known, tags) plus a body
-   in your own words (key takeaways, decisions, action items) — don't dump
-   raw HTML.
+5. **Write meeting files.** If a matching `sync-calendar` cache file
+   already exists (per Step 1's enrich-don't-skip rule), update it in
+   place. Otherwise create a new one under
+   `vault/meetings/YYYY-MM-DD-<slug>.md` with minimal frontmatter (title,
+   date, `notetakerSource: fireflies|gemini|manual`, attendees if known,
+   tags) plus a body in your own words (key takeaways, decisions, action
+   items) — don't dump raw HTML.
+
+   **Recurring series need a `recurs` field** (see `sync-calendar`'s
+   SKILL.md for the full rationale) — a plain-English cadence string like
+   `recurs: "Every Monday, 1:30–2:15 PM PHT"`, derived by comparing this
+   occurrence's weekday/time against other cached occurrences of the same
+   series or the hub note's `## Occurrences` list. Add it whenever you can
+   confirm the pattern from two or more occurrences; a series's cache file
+   filename freezes at first creation while its `date` gets overwritten to
+   the latest occurrence on each sync, so without `recurs` the two can
+   drift apart and look like separate meetings.
 
 6. **Write hub notes** — one per project/recurring series under
    `vault/notes/<slug>.md`, linking out to every meeting file you wrote for
@@ -102,8 +130,9 @@ syncs) should be sampled, not captured instance-by-instance.
    `vault/notes/` and `vault/meetings/`. Never write to the live calendar
    or Gmail (read-only in both directions).
 
-8. **Report a short summary**: how many meeting files and hub notes were
-   created, which series were sampled vs skipped, and any meetings where
-   content wasn't available (e.g. a Gemini email that only linked to a
-   Google Doc with no inline text — say so rather than fabricating
-   content).
+8. **Report a short summary**: how many meeting files were newly created
+   vs. enriched in place (existing `sync-calendar` cache files given real
+   content), how many hub notes were created, which series were sampled
+   vs skipped, and any meetings where content wasn't available (e.g. a
+   Gemini email that only linked to a Google Doc with no inline text — say
+   so rather than fabricating content).

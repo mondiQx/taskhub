@@ -49,6 +49,7 @@ async function main() {
     attendees: (e.attendees ?? []).map((a) => a.email).filter(Boolean),
     description: e.description ?? null,
     htmlLink: e.htmlLink ?? null,
+    hangoutLink: e.hangoutLink ?? null,
     recurringEventId: e.recurringEventId ?? null,
   }));
 

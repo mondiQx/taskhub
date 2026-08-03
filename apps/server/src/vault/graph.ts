@@ -35,34 +35,70 @@ interface RawFile {
   linkTargets: string[];
 }
 
+/** Recursively lists markdown files under dir, returning paths relative to dir (so subfolder notes, e.g. reports/monthly/2026-01.md, are found too). */
 async function listMarkdownFiles(dir: string): Promise<string[]> {
-  try {
-    const entries = await fs.readdir(dir);
-    return entries.filter((f) => f.endsWith(".md"));
-  } catch {
-    return [];
+  const out: string[] = [];
+  async function walk(sub: string) {
+    let entries;
+    try {
+      entries = await fs.readdir(path.join(dir, sub), { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const rel = sub ? `${sub}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) await walk(rel);
+      else if (entry.name.endsWith(".md")) out.push(rel);
+    }
   }
+  await walk("");
+  return out;
 }
 
 export const VAULT_FOLDERS = FOLDERS;
 
 /** Reads a vault file by folder + lowercased id (as used in graph node ids) — filenames are matched case-insensitively. */
-export async function readVaultFile(folder: string, id: string): Promise<{ title: string; body: string } | undefined> {
+export async function readVaultFile(
+  folder: string,
+  id: string,
+): Promise<
+  | {
+      title: string;
+      body: string;
+      date?: string;
+      start?: string;
+      end?: string;
+      recurs?: string;
+      url?: string;
+      meetLink?: string;
+    }
+  | undefined
+> {
   if (!FOLDERS.includes(folder)) return undefined;
   const dir = path.join(config.vaultPath, folder);
-  const file = (await listMarkdownFiles(dir)).find((f) => f.replace(/\.md$/, "").toLowerCase() === id.toLowerCase());
+  const file = (await listMarkdownFiles(dir)).find(
+    (f) => path.basename(f).replace(/\.md$/, "").toLowerCase() === id.toLowerCase(),
+  );
   if (!file) return undefined;
   const raw = await fs.readFile(path.join(dir, file), "utf8");
   const parsed = matter(raw);
   const title = typeof parsed.data.title === "string" ? parsed.data.title : file.replace(/\.md$/, "");
-  return { title, body: parsed.content.trim() };
+  const date = typeof parsed.data.date === "string" ? parsed.data.date : undefined;
+  const start = typeof parsed.data.start === "string" ? parsed.data.start : undefined;
+  const end = typeof parsed.data.end === "string" ? parsed.data.end : undefined;
+  const recurs = typeof parsed.data.recurs === "string" ? parsed.data.recurs : undefined;
+  const url = typeof parsed.data.url === "string" ? parsed.data.url : undefined;
+  const meetLink = typeof parsed.data.meetLink === "string" ? parsed.data.meetLink : undefined;
+  return { title, body: parsed.content.trim(), date, start, end, recurs, url, meetLink };
 }
 
 /** Finds which folder a vault id (as used in [[wikilinks]] / graph node ids) lives in, for following a link without knowing its folder up front. */
 export async function resolveVaultId(id: string): Promise<{ folder: string; taskId?: string } | undefined> {
   for (const folder of FOLDERS) {
     const dir = path.join(config.vaultPath, folder);
-    const file = (await listMarkdownFiles(dir)).find((f) => f.replace(/\.md$/, "").toLowerCase() === id.toLowerCase());
+    const file = (await listMarkdownFiles(dir)).find(
+      (f) => path.basename(f).replace(/\.md$/, "").toLowerCase() === id.toLowerCase(),
+    );
     if (!file) continue;
     if (folder !== "tasks") return { folder };
     const raw = await fs.readFile(path.join(dir, file), "utf8");
@@ -77,7 +113,7 @@ async function readVaultFiles(): Promise<RawFile[]> {
   for (const folder of FOLDERS) {
     const dir = path.join(config.vaultPath, folder);
     for (const file of await listMarkdownFiles(dir)) {
-      const id = file.replace(/\.md$/, "").toLowerCase();
+      const id = path.basename(file).replace(/\.md$/, "").toLowerCase();
       const raw = await fs.readFile(path.join(dir, file), "utf8");
       const parsed = matter(raw);
       const linkTargets = [...parsed.content.matchAll(WIKILINK)].map((m) => m[1].trim().toLowerCase());

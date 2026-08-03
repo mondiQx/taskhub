@@ -3,10 +3,19 @@ import { computed, ref, watch } from "vue";
 import type { Task, TaskPriority } from "../types";
 import { useTaskStore } from "../stores/taskStore";
 
-const props = defineProps<{ task: Task | null; mode: "create" | "edit" }>();
+const props = defineProps<{ task: Task | null; mode: "create" | "edit"; initialTitle?: string }>();
 const emit = defineEmits<{
   close: [];
-  create: [payload: { title: string; body: string; priority: TaskPriority; due: string | null; tags: string[] }];
+  create: [
+    payload: {
+      title: string;
+      body: string;
+      priority: TaskPriority;
+      due: string | null;
+      tags: string[];
+      relatedMeeting: { eventId: string; title: string; start: string } | null;
+    },
+  ];
   complete: [id: string];
   reopen: [id: string];
   linkMeeting: [id: string, meeting: { eventId: string; title: string; start: string } | null];
@@ -26,6 +35,7 @@ const draftBody = ref("");
 const draftPriority = ref<TaskPriority>("medium");
 const draftDue = ref("");
 const draftTags = ref<string[]>([]);
+const draftMeeting = ref<{ eventId: string; title: string; start: string } | null>(null);
 
 const editTitle = ref("");
 const editBody = ref("");
@@ -37,6 +47,14 @@ watch(
       editTitle.value = t.title;
       editBody.value = t.body;
     }
+  },
+  { immediate: true },
+);
+
+watch(
+  () => props.initialTitle,
+  (title) => {
+    if (props.mode === "create" && title) draftTitle.value = title;
   },
   { immediate: true },
 );
@@ -148,26 +166,31 @@ interface CalendarEvent {
 }
 
 const events = ref<CalendarEvent[]>([]);
+async function loadEvents() {
+  const [liveRes, vaultRes] = await Promise.all([fetch("/api/calendar/events"), fetch("/api/meetings")]);
+  const [live, vault]: [CalendarEvent[], CalendarEvent[]] = [await liveRes.json(), await vaultRes.json()];
+  events.value = [...vault, ...live].sort((a, b) => b.start.localeCompare(a.start));
+}
+if (props.mode === "create") loadEvents();
 watch(
   () => props.task?.id,
-  async (id) => {
+  (id) => {
     if (!id || props.mode !== "edit") return;
-    const [liveRes, vaultRes] = await Promise.all([fetch("/api/calendar/events"), fetch("/api/meetings")]);
-    const [live, vault]: [CalendarEvent[], CalendarEvent[]] = [await liveRes.json(), await vaultRes.json()];
-    events.value = [...vault, ...live].sort((a, b) => b.start.localeCompare(a.start));
+    loadEvents();
   },
   { immediate: true },
 );
 
 function onSelectMeeting(e: Event) {
-  if (!props.task) return;
   const eventId = (e.target as HTMLSelectElement).value;
-  if (!eventId) {
-    emit("linkMeeting", props.task.id, null);
+  const event = eventId ? events.value.find((ev) => ev.id === eventId) : undefined;
+  const meeting = event ? { eventId: event.id, title: event.title, start: event.start } : null;
+  if (props.mode === "create") {
+    draftMeeting.value = meeting;
     return;
   }
-  const event = events.value.find((ev) => ev.id === eventId);
-  if (event) emit("linkMeeting", props.task.id, { eventId: event.id, title: event.title, start: event.start });
+  if (!props.task) return;
+  emit("linkMeeting", props.task.id, meeting);
 }
 
 const HOLD_MS = 3000;
@@ -198,12 +221,14 @@ function submitCreate() {
     priority: draftPriority.value,
     due: draftDue.value ? new Date(`${draftDue.value}T00:00:00`).toISOString() : null,
     tags: draftTags.value,
+    relatedMeeting: draftMeeting.value,
   });
   draftTitle.value = "";
   draftBody.value = "";
   draftPriority.value = "medium";
   draftDue.value = "";
   draftTags.value = [];
+  draftMeeting.value = null;
 }
 </script>
 
@@ -279,6 +304,17 @@ function submitCreate() {
           </div>
         </div>
       </div>
+
+      <template v-if="mode === 'create'">
+        <h3>Discuss in meeting</h3>
+        <select class="meeting-select" :value="draftMeeting?.eventId ?? ''" @change="onSelectMeeting">
+          <option value="">Not linked to a meeting</option>
+          <option v-for="event in events" :key="event.id" :value="event.id" :title="`${event.title} — ${new Date(event.start).toLocaleString()}`">
+            {{ event.title }} — {{ new Date(event.start).toLocaleString() }}
+          </option>
+        </select>
+        <p v-if="!events.length" class="hint">No meetings found (nothing cached in vault/meetings, and Calendar not connected or nothing upcoming in the next 24h).</p>
+      </template>
 
       <template v-if="mode === 'edit' && task">
         <div class="actions">

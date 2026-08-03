@@ -7,8 +7,31 @@ const emit = defineEmits<{ close: []; "open-task": [taskId: string]; "open-note"
 
 const title = ref("");
 const body = ref("");
+const date = ref<string | undefined>(undefined);
+const start = ref<string | undefined>(undefined);
+const end = ref<string | undefined>(undefined);
+const recurs = ref<string | undefined>(undefined);
+const url = ref<string | undefined>(undefined);
+const meetLink = ref<string | undefined>(undefined);
 const loading = ref(true);
 const error = ref(false);
+
+const hasTimeOfDay = (iso: string) => /T\d{2}:\d{2}/.test(iso);
+
+const dateLabel = computed(() => {
+  if (!date.value) return "";
+  const d = new Date(date.value);
+  const dateStr = d.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  if (start.value && hasTimeOfDay(start.value)) {
+    const startStr = new Date(start.value).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+    if (end.value && hasTimeOfDay(end.value)) {
+      const endStr = new Date(end.value).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+      return `${dateStr} · ${startStr}–${endStr}`;
+    }
+    return `${dateStr} · ${startStr}`;
+  }
+  return dateStr;
+});
 
 const WIKILINK = /\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g;
 
@@ -49,6 +72,12 @@ watch(
       const data = await res.json();
       title.value = data.title;
       body.value = data.body;
+      date.value = data.date;
+      start.value = data.start;
+      end.value = data.end;
+      recurs.value = data.recurs;
+      url.value = data.url;
+      meetLink.value = data.meetLink;
     } catch {
       error.value = true;
     } finally {
@@ -65,6 +94,15 @@ watch(
       <button class="close" @click="emit('close')">×</button>
       <p class="folder-tag">{{ folder }}</p>
       <h2>{{ title || id }}</h2>
+      <p v-if="dateLabel" class="date-label">
+        {{ dateLabel }}<span v-if="recurs"> · {{ recurs }}</span>
+      </p>
+      <a v-if="meetLink" :href="meetLink" target="_blank" rel="noopener noreferrer" class="meeting-link">
+        Join on Meet ↗
+      </a>
+      <a v-else-if="url" :href="url" target="_blank" rel="noopener noreferrer" class="meeting-link">
+        Open in Calendar ↗
+      </a>
       <p v-if="loading" class="hint">Loading…</p>
       <p v-else-if="error" class="hint">Couldn't load this note.</p>
       <div v-else class="markdown-body" v-html="html" @click="onBodyClick"></div>
@@ -111,7 +149,15 @@ watch(
 }
 .close:hover { background: rgba(var(--shadow-tint), 0.08); color: var(--color-ink); }
 .folder-tag { font-size: 0.7rem; text-transform: uppercase; opacity: 0.5; margin: 0 0 0.15rem; letter-spacing: 0.05em; }
-h2 { margin: 0 0 var(--space-3); padding-right: var(--space-5); font-weight: 600; letter-spacing: -0.01em; font-size: clamp(1.15rem, 0.9rem + 0.6vw, 1.5rem); }
+h2 { margin: 0 0 var(--space-1); padding-right: var(--space-5); font-weight: 600; letter-spacing: -0.01em; font-size: clamp(1.15rem, 0.9rem + 0.6vw, 1.5rem); }
+.date-label { margin: 0 0 var(--space-2); font-size: 0.85rem; opacity: 0.6; }
+.meeting-link {
+  display: inline-flex; align-items: center; gap: 0.3rem; margin: 0 0 var(--space-3);
+  font-size: 0.85rem; font-weight: 600; color: var(--color-accent); text-decoration: none;
+  border: 1px solid var(--color-accent); border-radius: var(--radius-sm); padding: 0.3rem 0.7rem;
+  transition: background 140ms var(--ease), color 140ms var(--ease);
+}
+.meeting-link:hover { background: var(--color-accent); color: white; }
 .hint { font-size: 0.85rem; opacity: 0.6; }
 .markdown-body { font-size: clamp(0.95rem, 0.85rem + 0.2vw, 1.05rem); max-width: 68ch; }
 .markdown-body :deep(h1),
