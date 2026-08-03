@@ -121,6 +121,14 @@ export function categoryFor(task: Task): string {
   return task.source.type[0].toUpperCase() + task.source.type.slice(1);
 }
 
+/** Done tasks older than this many days since completion are hidden from the boards and only surface in History. */
+export const DONE_HISTORY_CUTOFF_DAYS = 30;
+
+export function isStaleDone(task: Task, now = new Date()): boolean {
+  if (task.status !== "done" || !task.completedAt) return false;
+  return daysBetween(new Date(task.completedAt), now) >= DONE_HISTORY_CUTOFF_DAYS;
+}
+
 export function groupByCategory(tasks: Task[]): Array<{ key: string; label: string; tasks: Task[] }> {
   const byCategory = new Map<string, Task[]>();
   for (const task of tasks) {

@@ -6,13 +6,15 @@ import { useVoiceCapture } from "../composables/useVoiceCapture";
 import PostItNote from "../components/PostItNote.vue";
 import PostItFolder from "../components/PostItFolder.vue";
 import TaskModal from "../components/TaskModal.vue";
+import UpcomingMeetingsStrip from "../components/UpcomingMeetingsStrip.vue";
 import type { Task, TaskPriority } from "../types";
 import { colorForId } from "../utils/noteColor";
+import { suggestedDueDateForBucket, type TimeBucket } from "../composables/useGrouping";
 
-const emit = defineEmits<{ open: [id: string] }>();
+const props = defineProps<{ groupBy: "time" | "category" }>();
+const emit = defineEmits<{ open: [id: string]; "open-meeting": [id: string] }>();
 const { store, openTasks, byTimePeriod, byCategory } = useTasks();
 
-const groupBy = ref<"time" | "category">("time");
 const search = ref("");
 const showAddModal = ref(false);
 const expandedKeys = ref<Set<string>>(new Set());
@@ -41,7 +43,7 @@ type Cell =
   | { type: "note"; task: Task }
   | { type: "folder"; key: string; label: string; count: number; previews: string[]; expanded: boolean };
 
-const groups = computed(() => (groupBy.value === "time" ? byTimePeriod.value : byCategory.value));
+const groups = computed(() => (props.groupBy === "time" ? byTimePeriod.value : byCategory.value));
 
 const cells = computed<Cell[]>(() => {
   const out: Cell[] = [];
@@ -74,44 +76,76 @@ function toggleFolder(key: string) {
   expandedKeys.value = next;
 }
 
+// Drag-and-drop is only meaningful for time buckets — a due date is a single
+// freely-settable field, unlike category which is derived from tags/source.
+function onFolderDrop(taskId: string, bucketKey: string) {
+  if (props.groupBy !== "time") return;
+  store.patch(taskId, { due: suggestedDueDateForBucket(bucketKey as TimeBucket) });
+  const next = new Set(expandedKeys.value);
+  next.add(bucketKey);
+  expandedKeys.value = next;
+}
+
+const voiceDraftTitle = ref("");
+const voiceCapturePending = ref(false);
+
 const voice = useVoiceCapture((transcript) => {
-  store.createTask({ title: transcript, source: { type: "voice", externalId: null, url: null } });
+  voiceDraftTitle.value = transcript;
+  voiceCapturePending.value = true;
+  showAddModal.value = true;
 });
 
-async function createFromModal(payload: { title: string; body: string; priority: TaskPriority; due: string | null; tags: string[] }) {
+async function createFromModal(payload: {
+  title: string;
+  body: string;
+  priority: TaskPriority;
+  due: string | null;
+  tags: string[];
+  relatedMeeting: { eventId: string; title: string; start: string } | null;
+}) {
   await store.createTask({
     title: payload.title,
     body: payload.body,
     priority: payload.priority,
     due: payload.due,
     tags: payload.tags,
-    source: { type: "manual", externalId: null, url: null },
+    relatedMeeting: payload.relatedMeeting ? { ...payload.relatedMeeting, reminderFired: false } : null,
+    source: voiceCapturePending.value
+      ? { type: "voice", externalId: null, url: null }
+      : { type: "manual", externalId: null, url: null },
   });
   showAddModal.value = false;
+  voiceCapturePending.value = false;
+  voiceDraftTitle.value = "";
+}
+
+function closeAddModal() {
+  showAddModal.value = false;
+  voiceCapturePending.value = false;
+  voiceDraftTitle.value = "";
 }
 </script>
 
 <template>
   <div class="postits">
+    <UpcomingMeetingsStrip @open-meeting="emit('open-meeting', $event)" @open-task="emit('open', $event)" />
     <div class="toolbar">
       <div class="search-wrap">
         <span class="search-icon">🔍</span>
         <input v-model="search" type="text" class="search" placeholder="Search notes and tags..." />
       </div>
-      <button
-        v-if="voice.supported"
-        type="button"
-        class="mic"
-        :class="{ recording: voice.recording }"
-        @click="voice.recording ? voice.stop() : voice.start()"
-      >
-        {{ voice.recording ? "● Stop" : "🎤" }}
-      </button>
-      <select v-model="groupBy" class="group-select" :disabled="searching">
-        <option value="time">Group by time</option>
-        <option value="category">Group by category</option>
-      </select>
-      <button class="add-btn" @click="showAddModal = true">+ Add task</button>
+      <div class="actions">
+        <button
+          v-if="voice.supported"
+          type="button"
+          class="mic"
+          :class="{ recording: voice.recording }"
+          @click="voice.recording ? voice.stop() : voice.start()"
+        >
+          {{ voice.recording ? "● Stop" : "🎤" }}
+        </button>
+        <button class="add-btn" @click="showAddModal = true">+ Add task</button>
+      </div>
     </div>
     <p v-if="voice.interimTranscript" class="interim">{{ voice.interimTranscript }}</p>
 
@@ -140,6 +174,7 @@ async function createFromModal(payload: { title: string; body: string; priority:
           >
             <PostItNote
               :task="cell.task"
+              :draggable="props.groupBy === 'time'"
               @complete="store.complete"
               @reopen="store.reopen"
               @open="emit('open', $event)"
@@ -151,7 +186,9 @@ async function createFromModal(payload: { title: string; body: string; priority:
               :count="cell.count"
               :previews="cell.previews"
               :expanded="cell.expanded"
+              :drop-target="props.groupBy === 'time'"
               @toggle="toggleFolder(cell.key)"
+              @drop="onFolderDrop($event, cell.key)"
             />
           </motion.div>
         </template>
@@ -162,7 +199,8 @@ async function createFromModal(payload: { title: string; body: string; priority:
       v-if="showAddModal"
       :task="null"
       mode="create"
-      @close="showAddModal = false"
+      :initial-title="voiceDraftTitle"
+      @close="closeAddModal"
       @create="createFromModal"
     />
   </div>
@@ -170,13 +208,19 @@ async function createFromModal(payload: { title: string; body: string; priority:
 
 <style scoped>
 .postits { padding: 1rem; }
-.toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem; align-items: center; }
-.search-wrap { flex: 1 1 200px; display: flex; align-items: center; gap: 0.4rem; padding: 0 0.6rem; border-radius: 6px; border: 1px solid #ccc; background: #fff; }
+.toolbar { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-3); align-items: center; }
+.search-wrap {
+  flex: 1 1 220px; max-width: 320px; display: flex; align-items: center; gap: 0.4rem;
+  padding: 0 0.6rem; border-radius: 6px; border: 1px solid #ccc; background: #fff;
+}
 .search-icon { opacity: 0.5; font-size: 0.85rem; }
-.search { flex: 1; border: none; padding: 0.5rem 0; background: none; font: inherit; }
+.search { flex: 1; min-width: 0; border: none; padding: 0.5rem 0; background: none; font: inherit; }
 .search:focus { outline: none; }
-.mic.recording { background: #e5484d; color: white; }
-.group-select { padding: 0.4rem; border-radius: 6px; border: 1px solid #ccc; }
+.actions { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; }
+.mic {
+  border: 1px solid #ccc; background: #fff; border-radius: 6px; padding: 0.5rem 0.75rem; cursor: pointer; font: inherit;
+}
+.mic.recording { background: #e5484d; color: white; border-color: #e5484d; }
 .add-btn { background: #2f2a24; color: white; border: none; border-radius: 6px; padding: 0.5rem 0.9rem; cursor: pointer; white-space: nowrap; }
 .interim { font-size: 0.8rem; opacity: 0.6; margin: 0.25rem 0 0.75rem; }
 .board {

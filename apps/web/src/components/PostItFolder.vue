@@ -1,21 +1,33 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import { motion } from "motion-v";
 
-const props = defineProps<{ label: string; count: number; previews?: string[]; expanded?: boolean }>();
-defineEmits<{ toggle: [] }>();
+const props = defineProps<{ label: string; count: number; previews?: string[]; expanded?: boolean; dropTarget?: boolean }>();
+const emit = defineEmits<{ toggle: []; drop: [taskId: string] }>();
 
 const SLOTS = 4;
+const dragOver = ref(false);
+
+function onDrop(e: DragEvent) {
+  dragOver.value = false;
+  if (!props.dropTarget) return;
+  const taskId = e.dataTransfer?.getData("text/plain");
+  if (taskId) emit("drop", taskId);
+}
 </script>
 
 <template>
   <motion.button
     class="folder"
-    :class="{ expanded }"
+    :class="{ expanded, 'drag-over': dragOver }"
     layout
     :while-hover="{ scale: 1.04 }"
     :while-tap="{ scale: 0.95 }"
     :transition="{ type: 'spring', stiffness: 420, damping: 30 }"
     @click="$emit('toggle')"
+    @dragover.prevent="dropTarget && (dragOver = true)"
+    @dragleave="dragOver = false"
+    @drop.prevent="onDrop"
   >
     <span class="tile">
       <span v-for="i in SLOTS" :key="i" class="chip" :style="{ background: previews?.[i - 1] ?? 'rgba(var(--shadow-tint), 0.12)' }" />
@@ -61,6 +73,10 @@ const SLOTS = 4;
 .folder.expanded .tile {
   border-color: var(--color-accent);
   box-shadow: 0 0 0 2px rgba(193, 103, 58, 0.25), var(--shadow-md);
+}
+.folder.drag-over .tile {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(193, 103, 58, 0.35), var(--shadow-md);
 }
 .chip {
   border-radius: 28%;

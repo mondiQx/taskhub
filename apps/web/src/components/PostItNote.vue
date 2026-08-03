@@ -2,10 +2,15 @@
 import type { Task } from "../types";
 import { colorForId } from "../utils/noteColor";
 
-const props = defineProps<{ task: Task }>();
+const props = defineProps<{ task: Task; draggable?: boolean }>();
 const emit = defineEmits<{ complete: [id: string]; reopen: [id: string]; open: [id: string] }>();
 
 const colorFor = colorForId;
+
+function onDragStart(e: DragEvent) {
+  e.dataTransfer?.setData("text/plain", props.task.id);
+  if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+}
 </script>
 
 <template>
@@ -13,6 +18,8 @@ const colorFor = colorForId;
     class="note"
     :style="{ background: colorFor(task.id) }"
     :class="{ done: task.status === 'done' }"
+    :draggable="draggable"
+    @dragstart="draggable && onDragStart($event)"
     @click="emit('open', task.id)"
   >
     <label @click.stop>
