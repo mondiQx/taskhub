@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.raymond.task-hub.morning</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/qip-innovation/Desktop/repos/task-hub/scripts/morning-run.sh</string>
+  </array>
+
+  <!-- Fires at 07:45 local time whenever the Mac is on and you're logged
+       in. If the Mac is asleep/off at 07:45, launchd runs it at next
+       wake/login instead of skipping it entirely (StartCalendarInterval
+       behavior) -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>7</integer>
+    <key>Minute</key>
+    <integer>45</integer>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/task-hub-morning.stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/task-hub-morning.stderr.log</string>
+</dict>
+</plist>

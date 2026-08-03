@@ -90,13 +90,31 @@ source (Gmail, Jira, Slack, Calendar), search existing files under
 **update that file** (fields + append a `history` entry) instead of creating
 a new one. Never create a second task file for the same `source.externalId`.
 
-## Gmail / Jira sync
+## Gmail / Jira / Calendar sync
 
-Gmail and Jira tasks are **not** pulled by the Node backend — there is no
-OAuth client or API token for either in this repo. Instead, use the
-`sync-inbox` skill (`.claude/skills/sync-inbox/SKILL.md`), which relies on
-this Claude session's already-authorized Gmail and Atlassian MCP
-connections. Run it via the `/sync` command, or on a schedule.
+Gmail, Jira, and Calendar data are **not** pulled by the Node backend —
+there is no OAuth client or API token for any of them in this repo.
+Instead, each source has its own skill under `.claude/skills/`
+(`sync-gmail`, `sync-jira`, `sync-calendar`), relying on this Claude
+session's already-authorized Gmail/Atlassian/Google Calendar MCP
+connections. Run them individually via `/sync-gmail`, `/sync-jira`,
+`/sync-calendar`, or all at once via `/morning` (see below).
+
+## Automation
+
+- `/briefing` (`daily-briefing` skill) — read-only summary of overdue/
+  due-soon tasks, today's meetings, and pending review-queue items.
+- `/draft-followups` (`draft-followups` skill) — prepares Gmail drafts and
+  Jira comment text for stalled tasks. **Never sends/posts automatically**
+  — this is a deliberate safety boundary, not an oversight. Don't add an
+  auto-send path without the user explicitly asking for it in writing.
+- `/morning` — runs sync-gmail → sync-jira → sync-calendar →
+  daily-briefing → draft-followups in sequence, so later steps see the
+  freshly-synced vault.
+- `scripts/morning-run.sh` + `scripts/com.raymond.task-hub.morning.plist` —
+  a macOS LaunchAgent that fires `/morning` headlessly at 07:45 local time
+  when the laptop is on and logged in. Not installed by default; see the
+  plist comments for what it does before loading it with `launchctl`.
 
 ## Do not
 

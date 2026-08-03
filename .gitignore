@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env
 .credentials/
+.data/
 vault/.obsidian/workspace*
 vault/.obsidian/plugins/
 .DS_Store
