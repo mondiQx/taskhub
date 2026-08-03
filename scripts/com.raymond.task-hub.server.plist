@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.raymond.task-hub.server</string>
+
+  <!-- Runs the production server (npm run start -w apps/server) directly
+       rather than through a wrapper script — it's a long-lived process,
+       not a one-shot job, so launchd itself handles restart-on-crash via
+       KeepAlive below. Update the two absolute paths if this repo ever
+       moves. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/node</string>
+    <string>/Users/qip-innovation/Desktop/repos/task-hub/apps/server/dist/index.js</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/qip-innovation/Desktop/repos/task-hub/apps/server</string>
+
+  <!-- Starts on login and keeps restarting if it crashes, but not in a
+       tight loop if it's crash-looping (e.g. missing build output). -->
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/task-hub-server.stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/task-hub-server.stderr.log</string>
+</dict>
+</plist>
