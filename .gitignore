@@ -15,9 +15,11 @@ vault/notes/*
 vault/journal/*
 vault/reports/*
 vault/meetings/*
+vault/raw/*
 !vault/tasks/.gitkeep
 !vault/notes/.gitkeep
 !vault/journal/.gitkeep
 !vault/reports/.gitkeep
 !vault/meetings/.gitkeep
+!vault/raw/.gitkeep
 *.tsbuildinfo

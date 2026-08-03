@@ -16,8 +16,27 @@ auth-hardening, or enterprise patterns — optimize for "one person, one Mac".
 - `vault/notes/` — long-lived freeform knowledge-base notes, not tasks.
 - `vault/journal/` — daily notebook-journal files, `YYYY-MM-DD.md`, for quick
   post-it-style capture that isn't a task.
-- `vault/reports/` — material collected or drafted for reports.
+- `vault/reports/` — the actual reports (docs/decks) live in Google Drive,
+  not here, but this folder does hold **comprehensive synthesized
+  summaries**, not just pointer stubs. Layout per report series:
+  - `vault/reports/<series-name>.md` — hub note: what the report is, who
+    it's for, cadence/deadline, the Drive folder link, and a list linking
+    out to each period's summary note.
+  - `vault/reports/<series-name>/<period>.md` — one note per period
+    (month, or per-week-appended-monthly for weekly decks) with a full
+    written summary of what happened, cross-linked to the people/topics/
+    meetings it touches — so Obsidian's graph and backlinks work like any
+    other note. For a series delivered weekly but reviewed monthly (e.g.
+    the DnA weekly report), use one note per month and append new weekly
+    sections as they land, rather than one file per week.
+  - Do not paste the raw doc/deck text verbatim — write a synthesized
+    summary in your own words, organized by the report's own sections.
 - `vault/meetings/` — cached calendar events, for reference/linking from tasks.
+- `vault/raw/` — drop zone for source material (screenshots, PDFs, exported
+  docs, photos of whiteboards, etc.) that isn't itself vault content. The
+  `audit-vault` skill reads from here to enrich thin notes/meetings/tasks,
+  then the file can be deleted — nothing in the kanban/list/post-it board or
+  the graph view reads this folder directly.
 
 ## Task file schema
 
