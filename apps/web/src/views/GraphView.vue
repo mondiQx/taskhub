@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useTaskStore } from "../stores/taskStore";
 
 const emit = defineEmits<{ open: [id: string]; "open-note": [folder: string, id: string] }>();
@@ -45,6 +45,9 @@ const nodes = ref<GraphNode[]>([]);
 const edges = ref<GraphEdge[]>([]);
 const hovered = ref<GraphNode | null>(null);
 const activeFolders = ref(new Set(Object.keys(FOLDER_COLORS)));
+const searchQuery = ref("");
+const focusIds = ref<Set<string> | null>(null);
+const hideNonFocused = ref(false);
 
 let ctx: CanvasRenderingContext2D | null = null;
 let raf = 0;
@@ -53,6 +56,32 @@ let dragStart = { x: 0, y: 0 };
 let dragMoved = false;
 let panX = 0;
 let panY = 0;
+let adjacency = new Map<string, Set<string>>();
+// Zoom-to-fit camera applied only while search-hiding is active, so the
+// surviving focused nodes expand to fill the canvas instead of leaving the
+// gaps where hidden nodes used to be. Identity (scale 1, centered) otherwise.
+let camera = { scale: 1, cx: 0, cy: 0 };
+
+function neighborhoodOf(ids: string[]): Set<string> {
+  const set = new Set<string>();
+  for (const id of ids) {
+    set.add(id);
+    for (const neighbor of adjacency.get(id) ?? []) set.add(neighbor);
+  }
+  return set;
+}
+
+function updateSearchFocus() {
+  const query = searchQuery.value.trim().toLowerCase();
+  if (!query) {
+    focusIds.value = null;
+    hideNonFocused.value = false;
+    return;
+  }
+  const matches = nodes.value.filter((n) => n.label.toLowerCase().includes(query)).map((n) => n.id);
+  focusIds.value = neighborhoodOf(matches);
+  hideNonFocused.value = true;
+}
 
 function resize() {
   const canvas = canvasRef.value;
@@ -153,18 +182,49 @@ function draw() {
   );
   const byId = new Map(nodes.value.map((n) => [n.id, n]));
 
-  ctx.strokeStyle = "rgba(120,110,95,0.35)";
-  ctx.lineWidth = 1;
+  const focus = focusIds.value;
+  const DIM_ALPHA = 0.15;
+
+  if (hideNonFocused.value && focus && focus.size) {
+    const pts = nodes.value.filter((n) => visible.has(n.id) && focus.has(n.id));
+    if (pts.length) {
+      const minX = Math.min(...pts.map((p) => p.x));
+      const maxX = Math.max(...pts.map((p) => p.x));
+      const minY = Math.min(...pts.map((p) => p.y));
+      const maxY = Math.max(...pts.map((p) => p.y));
+      const pad = 70;
+      const scale = Math.min(
+        (canvas.width - pad * 2) / Math.max(maxX - minX, 1),
+        (canvas.height - pad * 2) / Math.max(maxY - minY, 1),
+        3,
+      );
+      camera = { scale: Math.max(scale, 0.4), cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 };
+    }
+  } else {
+    camera = { scale: 1, cx: canvas.width / 2, cy: canvas.height / 2 };
+  }
+
+  ctx.save();
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.scale(camera.scale, camera.scale);
+  ctx.translate(-camera.cx, -camera.cy);
+
+  ctx.lineWidth = 1 / camera.scale;
   for (const e of edges.value) {
     if (!visible.has(e.source) || !visible.has(e.target)) continue;
+    const edgeFocused = !focus || (focus.has(e.source) && focus.has(e.target));
+    if (!edgeFocused && hideNonFocused.value) continue;
     const a = byId.get(e.source);
     const b = byId.get(e.target);
     if (!a || !b) continue;
+    ctx.globalAlpha = edgeFocused ? 1 : DIM_ALPHA;
+    ctx.strokeStyle = "rgba(120,110,95,0.35)";
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
     ctx.lineTo(b.x, b.y);
     ctx.stroke();
   }
+  ctx.globalAlpha = 1;
 
   const degree = new Map<string, number>();
   for (const e of edges.value) {
@@ -174,38 +234,61 @@ function draw() {
 
   for (const n of nodes.value) {
     if (!visible.has(n.id)) continue;
+    const isFocused = !focus || focus.has(n.id);
+    if (!isFocused && hideNonFocused.value) continue;
+    ctx.globalAlpha = isFocused ? 1 : DIM_ALPHA;
     const r = 4 + Math.min(degree.get(n.id) ?? 0, 10) * 1.2;
     ctx.beginPath();
     ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
     ctx.fillStyle = n.color ?? FOLDER_COLORS[n.folder] ?? "#888";
     ctx.fill();
-    if (n === hovered.value) {
+    if (n === hovered.value && isFocused) {
       ctx.strokeStyle = "#2f2a24";
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 2 / camera.scale;
       ctx.stroke();
     }
   }
+  ctx.globalAlpha = 1;
+  ctx.restore();
 
-  if (hovered.value) {
-    const n = hovered.value;
-    ctx.font = "12px system-ui, sans-serif";
+  // Labels are drawn in screen space (after restore) so font size stays
+  // constant regardless of zoom level.
+  function toScreen(n: GraphNode) {
+    return {
+      x: (n.x - camera.cx) * camera.scale + canvas!.width / 2,
+      y: (n.y - camera.cy) * camera.scale + canvas!.height / 2,
+    };
+  }
+
+  function drawLabel(n: GraphNode) {
+    const { x, y } = toScreen(n);
+    ctx!.font = "12px system-ui, sans-serif";
     const text = n.label;
     const padding = 6;
-    const tw = ctx.measureText(text).width;
-    ctx.fillStyle = "rgba(47,42,36,0.9)";
-    ctx.fillRect(n.x + 10, n.y - 10, tw + padding * 2, 20);
-    ctx.fillStyle = "#fff";
-    ctx.fillText(text, n.x + 10 + padding, n.y + 4);
+    const tw = ctx!.measureText(text).width;
+    ctx!.fillStyle = "rgba(47,42,36,0.9)";
+    ctx!.fillRect(x + 10, y - 10, tw + padding * 2, 20);
+    ctx!.fillStyle = "#fff";
+    ctx!.fillText(text, x + 10 + padding, y + 4);
+  }
+
+  if (focus) {
+    for (const n of nodes.value) {
+      if (visible.has(n.id) && focus.has(n.id)) drawLabel(n);
+    }
+  } else if (hovered.value) {
+    drawLabel(hovered.value);
   }
 }
 
 function nodeAt(x: number, y: number): GraphNode | null {
+  const hitRadius = 15 / camera.scale;
   for (let i = nodes.value.length - 1; i >= 0; i--) {
     const n = nodes.value[i];
     if (!activeFolders.value.has(n.folder) || (!taskStore.showDone && n.status === "done")) continue;
     const dx = n.x - x;
     const dy = n.y - y;
-    if (dx * dx + dy * dy < 15 * 15) return n;
+    if (dx * dx + dy * dy < hitRadius * hitRadius) return n;
   }
   return null;
 }
@@ -215,17 +298,33 @@ function toLocal(evt: MouseEvent) {
   return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
 }
 
+// Screen-space (canvas pixel) coordinates -> world-space (node) coordinates,
+// inverting the zoom-to-fit camera transform applied in draw().
+function toWorld(x: number, y: number) {
+  const canvas = canvasRef.value!;
+  return {
+    x: (x - canvas.width / 2) / camera.scale + camera.cx,
+    y: (y - canvas.height / 2) / camera.scale + camera.cy,
+  };
+}
+
 const DRAG_THRESHOLD = 4;
 
 function onMouseDown(evt: MouseEvent) {
-  const { x, y } = toLocal(evt);
+  const local = toLocal(evt);
+  const { x, y } = toWorld(local.x, local.y);
   dragging = nodeAt(x, y);
   dragStart = { x, y };
   dragMoved = false;
+  if (dragging) {
+    focusIds.value = neighborhoodOf([dragging.id]);
+    hideNonFocused.value = false;
+  }
 }
 
 function onMouseMove(evt: MouseEvent) {
-  const { x, y } = toLocal(evt);
+  const local = toLocal(evt);
+  const { x, y } = toWorld(local.x, local.y);
   if (dragging) {
     if (!dragMoved) {
       const dx = x - dragStart.x;
@@ -251,12 +350,25 @@ function onClick(evt: MouseEvent) {
     dragMoved = false;
     return;
   }
-  const { x, y } = toLocal(evt);
+  const local = toLocal(evt);
+  const { x, y } = toWorld(local.x, local.y);
   const n = nodeAt(x, y);
-  if (!n) return;
+  if (!n) {
+    if (!searchQuery.value.trim()) {
+      focusIds.value = null;
+      hideNonFocused.value = false;
+    }
+    return;
+  }
   if (n.taskId) emit("open", n.taskId);
   else if (n.folder !== "category") emit("open-note", n.folder, n.id);
 }
+
+const matchCount = computed(() => {
+  if (!searchQuery.value.trim()) return null;
+  const query = searchQuery.value.trim().toLowerCase();
+  return nodes.value.filter((n) => n.label.toLowerCase().includes(query)).length;
+});
 
 function toggleFolder(folder: string) {
   if (activeFolders.value.has(folder)) activeFolders.value.delete(folder);
@@ -284,6 +396,14 @@ async function load() {
     };
   });
   edges.value = data.edges;
+
+  adjacency = new Map();
+  for (const e of edges.value) {
+    if (!adjacency.has(e.source)) adjacency.set(e.source, new Set());
+    if (!adjacency.has(e.target)) adjacency.set(e.target, new Set());
+    adjacency.get(e.source)!.add(e.target);
+    adjacency.get(e.target)!.add(e.source);
+  }
 }
 
 onMounted(async () => {
@@ -310,6 +430,12 @@ onBeforeUnmount(() => {
       @mouseleave="onMouseUp"
       @click="onClick"
     />
+    <div class="search-box">
+      <input v-model="searchQuery" type="text" placeholder="Search nodes…" @input="updateSearchFocus" />
+      <span v-if="matchCount !== null" class="match-count">
+        {{ matchCount === 0 ? "no matches" : `${matchCount} match${matchCount === 1 ? "" : "es"}` }}
+      </span>
+    </div>
     <div class="legend">
       <button
         v-for="(color, folder) in FOLDER_COLORS"
@@ -339,6 +465,15 @@ canvas { display: block; width: 100%; height: 100%; }
   position: absolute; top: 0.75rem; left: 0.75rem; display: flex; flex-direction: column; gap: 0.35rem;
   background: rgba(255,255,255,0.85); padding: 0.5rem 0.75rem; border-radius: 8px; font-size: 0.8rem;
 }
+.search-box {
+  position: absolute; top: 0.75rem; right: 0.75rem; display: flex; align-items: center; gap: 0.5rem;
+  background: rgba(255,255,255,0.85); padding: 0.5rem 0.75rem; border-radius: 8px; font-size: 0.8rem;
+}
+.search-box input {
+  border: 1px solid rgba(47,42,36,0.2); border-radius: 6px; padding: 0.3rem 0.5rem; font-size: 0.8rem;
+  background: #fff; color: #2f2a24; outline: none; width: 160px;
+}
+.match-count { opacity: 0.65; white-space: nowrap; }
 .legend-item {
   display: flex; align-items: center; gap: 0.4rem; background: none; border: none; cursor: pointer;
   padding: 0.1rem 0; color: #2f2a24; text-transform: capitalize;
