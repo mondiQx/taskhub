@@ -21,6 +21,29 @@ export interface HistoryEntry {
   note?: string;
 }
 
+export interface Meeting {
+  id: string;
+  title: string;
+  start: string;
+  end?: string;
+  attendees?: string[];
+  eventId?: string;
+  recurringEventId?: string;
+  hub?: string;
+  source?: string;
+  url?: string;
+  recurs?: string;
+}
+
+export interface ReviewItem {
+  id: string;
+  subject: string;
+  reason: string;
+  threadId: string;
+  from: string;
+  sourceFile: string;
+}
+
 export interface Task {
   id: string;
   title: string;

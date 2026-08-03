@@ -2,10 +2,25 @@ import { Router } from "express";
 import { taskRepository } from "../vault/taskRepository.js";
 import { calendarCache } from "../reminders/calendarCache.js";
 import { buildVaultGraph, readVaultFile, resolveVaultId } from "../vault/graph.js";
-import { listVaultMeetings } from "../vault/meetingsRepository.js";
+import { listVaultMeetings, listVaultMeetingsFull } from "../vault/meetingsRepository.js";
+import { getHistory, startMorningRun, stopMorningRun } from "../automation/morningRun.js";
+import { reviewQueueRepository } from "../vault/reviewQueue.js";
 import type { NewTaskInput } from "../types.js";
 
 export const router = Router();
+
+router.get("/morning/history", (_req, res) => {
+  res.json(getHistory());
+});
+
+router.post("/morning/run", (_req, res) => {
+  const run = startMorningRun();
+  res.status(run.status === "running" ? 202 : 200).json(run);
+});
+
+router.post("/morning/stop", (_req, res) => {
+  res.json(stopMorningRun());
+});
 
 router.get("/calendar/events", (_req, res) => {
   res.json(calendarCache.list());
@@ -13,6 +28,10 @@ router.get("/calendar/events", (_req, res) => {
 
 router.get("/meetings", async (_req, res) => {
   res.json(await listVaultMeetings());
+});
+
+router.get("/meetings/full", async (_req, res) => {
+  res.json(await listVaultMeetingsFull());
 });
 
 router.get("/graph", async (_req, res) => {
@@ -102,6 +121,28 @@ router.post("/ingest", async (req, res) => {
   }
   const task = await taskRepository.create(input);
   res.status(201).json(task);
+});
+
+router.get("/review-queue", async (_req, res) => {
+  res.json(await reviewQueueRepository.list());
+});
+
+router.post("/review-queue/:id/promote", async (req, res) => {
+  try {
+    await reviewQueueRepository.promote(req.params.id);
+    res.status(204).end();
+  } catch (err) {
+    res.status(404).json({ error: (err as Error).message });
+  }
+});
+
+router.post("/review-queue/:id/dismiss", async (req, res) => {
+  try {
+    await reviewQueueRepository.dismiss(req.params.id);
+    res.status(204).end();
+  } catch (err) {
+    res.status(404).json({ error: (err as Error).message });
+  }
 });
 
 router.post("/voice-note", async (req, res) => {

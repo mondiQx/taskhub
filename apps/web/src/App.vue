@@ -1,19 +1,37 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useTaskStore } from "./stores/taskStore";
+import { useAutomationStore } from "./stores/automationStore";
+import { useReviewQueueStore } from "./stores/reviewQueueStore";
 import { useNotifications } from "./composables/useNotifications";
 import KanbanView from "./views/KanbanView.vue";
 import PostItView from "./views/PostItView.vue";
 import GraphView from "./views/GraphView.vue";
+import MeetingsView from "./views/MeetingsView.vue";
+import ReviewQueueView from "./views/ReviewQueueView.vue";
+import HistoryView from "./views/HistoryView.vue";
 import TaskModal from "./components/TaskModal.vue";
 import NoteModal from "./components/NoteModal.vue";
+import MorningRunModal from "./components/MorningRunModal.vue";
+import MeetingAlarmModal from "./components/MeetingAlarmModal.vue";
+import AppSidebar from "./components/AppSidebar.vue";
 
 const store = useTaskStore();
+const automation = useAutomationStore();
+const reviewQueue = useReviewQueueStore();
 const notifications = useNotifications();
+const showMorningRun = ref(false);
+const sidebarOpen = ref(true);
 
-type ViewMode = "postit" | "kanban" | "graph";
+function startMyDay() {
+  showMorningRun.value = true;
+  automation.run();
+}
+
+type ViewMode = "postit" | "kanban" | "graph" | "meetings" | "review" | "history";
 const view = ref<ViewMode>("postit");
 const groupBy = ref<"priority" | "time">("time");
+const postItGroupBy = ref<"time" | "category">("time");
 const openTaskId = ref<string | null>(null);
 const openNote = ref<{ folder: string; id: string } | null>(null);
 
@@ -30,38 +48,65 @@ function openNoteFromNote(folder: string, id: string) {
 
 onMounted(() => {
   store.init();
+  automation.init();
+  reviewQueue.init();
 });
 </script>
 
 <template>
   <div class="app">
     <header>
+      <button class="menu-btn" @click="sidebarOpen = true" aria-label="Open menu">☰</button>
       <h1>Task Hub</h1>
-      <nav class="view-switch">
-        <button :class="{ active: view === 'postit' }" @click="view = 'postit'">Post-its</button>
-        <button :class="{ active: view === 'kanban' }" @click="view = 'kanban'">Kanban</button>
-        <button :class="{ active: view === 'graph' }" @click="view = 'graph'">Graph</button>
-      </nav>
       <div class="right">
-        <select v-if="view === 'kanban'" v-model="groupBy">
-          <option value="time">By time period</option>
-          <option value="priority">By priority</option>
-        </select>
+        <button class="start-my-day" :disabled="automation.current?.status === 'running'" @click="startMyDay">
+          {{ automation.current?.status === "running" ? "Running…" : "Start my day" }}
+        </button>
         <button class="toggle-done" :class="{ active: !store.showDone }" @click="store.toggleShowDone()">
           {{ store.showDone ? "Hide done" : "Show done" }}
-        </button>
-        <button v-if="notifications.permission !== 'granted'" @click="notifications.requestPermission()">
-          Enable reminders
         </button>
         <span class="status" :class="{ connected: store.connected }">{{ store.connected ? "live" : "reconnecting…" }}</span>
       </div>
     </header>
 
-    <main :class="{ 'no-scroll': view === 'kanban' || view === 'graph' }">
-      <PostItView v-if="view === 'postit'" @open="openTaskId = $event" />
-      <KanbanView v-else-if="view === 'kanban'" :group-by="groupBy" @open="openTaskId = $event" />
-      <GraphView v-else @open="openTaskId = $event" @open-note="(folder, id) => (openNote = { folder, id })" />
-    </main>
+    <div class="body">
+      <AppSidebar
+        :open="sidebarOpen"
+        :view="view"
+        :group-by="groupBy"
+        :post-it-group-by="postItGroupBy"
+        :review-count="reviewQueue.items.length"
+        :notifications-granted="notifications.permission === 'granted'"
+        @close="sidebarOpen = false"
+        @update:view="view = $event"
+        @update:group-by="groupBy = $event"
+        @update:post-it-group-by="postItGroupBy = $event"
+        @request-notifications="notifications.requestPermission()"
+      />
+
+      <main :class="{ 'no-scroll': view === 'kanban' || view === 'graph' }">
+        <PostItView
+          v-if="view === 'postit'"
+          :group-by="postItGroupBy"
+          @open="openTaskId = $event"
+          @open-meeting="openNote = { folder: 'meetings', id: $event }"
+        />
+        <KanbanView
+          v-else-if="view === 'kanban'"
+          :group-by="groupBy"
+          @open="openTaskId = $event"
+          @open-meeting="openNote = { folder: 'meetings', id: $event }"
+        />
+        <GraphView v-else-if="view === 'graph'" @open="openTaskId = $event" @open-note="(folder, id) => (openNote = { folder, id })" />
+        <MeetingsView
+          v-else-if="view === 'meetings'"
+          @open="openTaskId = $event"
+          @open-meeting="openNote = { folder: 'meetings', id: $event }"
+        />
+        <ReviewQueueView v-else-if="view === 'review'" />
+        <HistoryView v-else @open="openTaskId = $event" />
+      </main>
+    </div>
 
     <TaskModal
       v-if="openTask"
@@ -94,6 +139,16 @@ onMounted(() => {
       @close="openNote = null"
       @open-task="openTaskFromNote"
       @open-note="openNoteFromNote"
+    />
+
+    <MorningRunModal v-if="showMorningRun" @close="showMorningRun = false" />
+
+    <MeetingAlarmModal
+      v-if="store.meetingAlert"
+      :title="store.meetingAlert.title"
+      :note="store.meetingAlert.note"
+      :minutes-until="store.meetingAlert.minutesUntil"
+      @dismiss="store.dismissMeetingAlert()"
     />
   </div>
 </template>
@@ -142,31 +197,36 @@ header {
   box-shadow: var(--shadow-md);
 }
 header h1 { font-size: 1rem; font-weight: 600; letter-spacing: -0.01em; margin: 0; margin-right: var(--space-2); white-space: nowrap; }
-.view-switch { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.view-switch button, .right button {
+.menu-btn {
+  background: none; border: 1px solid rgba(255, 255, 255, 0.28); color: white;
+  padding: 0.35rem 0.6rem; border-radius: var(--radius-sm); cursor: pointer;
+  font-size: 1rem; line-height: 1; flex-shrink: 0;
+  transition: background 160ms var(--ease), border-color 160ms var(--ease);
+}
+.menu-btn:hover { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.45); }
+.right button {
   background: none; border: 1px solid rgba(255, 255, 255, 0.28); color: white;
   padding: 0.35rem var(--space-3); border-radius: var(--radius-sm); cursor: pointer;
   font: inherit; font-size: 0.85rem; white-space: nowrap;
   transition: background 160ms var(--ease), border-color 160ms var(--ease), transform 120ms var(--ease);
 }
-.view-switch button:hover, .right button:hover { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.45); }
-.view-switch button:active, .right button:active { transform: scale(0.97); }
-.view-switch button.active { background: var(--color-accent); border-color: var(--color-accent); }
+.right button:hover { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.45); }
+.right button:active { transform: scale(0.97); }
 .toggle-done.active { background: rgba(255, 255, 255, 0.16); border-color: rgba(255, 255, 255, 0.5); }
+.start-my-day { background: var(--color-accent); border-color: var(--color-accent); font-weight: 600; }
+.start-my-day:disabled { opacity: 0.7; cursor: default; }
 .right { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
-.right select {
-  font: inherit; font-size: 0.85rem; background: rgba(255, 255, 255, 0.08); color: white;
-  border: 1px solid rgba(255, 255, 255, 0.28); border-radius: var(--radius-sm); padding: 0.35rem var(--space-2);
-}
 .status { font-size: 0.75rem; opacity: 0.6; white-space: nowrap; }
 .status.connected { opacity: 1; color: #8be28b; }
-main { flex: 1; overflow-y: auto; min-height: 0; }
+.body { flex: 1; display: flex; min-height: 0; }
+main { flex: 1; overflow-y: auto; min-height: 0; min-width: 0; }
 main.no-scroll { overflow: hidden; }
 
 @media (max-width: 640px) {
-  header { justify-content: center; }
-  header h1 { width: 100%; text-align: center; margin-right: 0; }
-  .view-switch { justify-content: center; width: 100%; }
-  .right { width: 100%; justify-content: center; }
+  header { gap: var(--space-2); }
+  header h1 { display: none; }
+  .right { gap: var(--space-1); }
+  .right button { padding: 0.3rem 0.55rem; font-size: 0.78rem; }
+  .status { font-size: 0.68rem; }
 }
 </style>

@@ -1,16 +1,27 @@
 import { defineStore } from "pinia";
 import type { Task } from "../types";
+import { useAutomationStore } from "./automationStore";
+import { useReviewQueueStore } from "./reviewQueueStore";
+import { startMeetingAlarm, stopMeetingAlarm } from "../utils/chime";
+
+interface MeetingAlert {
+  taskId?: string;
+  title: string;
+  note?: string;
+  minutesUntil?: number;
+}
 
 interface State {
   tasks: Task[];
   connected: boolean;
   showDone: boolean;
+  meetingAlert: MeetingAlert | null;
 }
 
 let socket: WebSocket | undefined;
 
 export const useTaskStore = defineStore("tasks", {
-  state: (): State => ({ tasks: [], connected: false, showDone: true }),
+  state: (): State => ({ tasks: [], connected: false, showDone: true, meetingAlert: null }),
 
   actions: {
     toggleShowDone() {
@@ -55,12 +66,36 @@ export const useTaskStore = defineStore("tasks", {
       }
       if (msg.channel === "meeting") {
         this.notifyMeeting(msg.payload);
+        return;
+      }
+      if (msg.channel === "morning") {
+        useAutomationStore().applyRun(msg.payload);
+        return;
+      }
+      if (msg.channel === "review-snapshot") {
+        useReviewQueueStore().applySnapshot(msg.payload.items);
+        return;
+      }
+      if (msg.channel === "review") {
+        useReviewQueueStore().applyChange(msg.payload);
       }
     },
 
-    notifyMeeting(payload: { taskId: string; title: string; note: string }) {
+    notifyMeeting(payload: MeetingAlert) {
+      this.meetingAlert = payload;
+      startMeetingAlarm(); // keeps ringing until dismissMeetingAlert()
+
       if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
-      new Notification(`Meeting starting: ${payload.title}`, { body: payload.note || "Open the linked task." });
+      const heading =
+        payload.minutesUntil != null
+          ? `Meeting in ${payload.minutesUntil} min: ${payload.title}`
+          : `Meeting starting: ${payload.title}`;
+      new Notification(heading, { body: payload.note || "Open the linked task." });
+    },
+
+    dismissMeetingAlert() {
+      stopMeetingAlarm();
+      this.meetingAlert = null;
     },
 
     async createTask(input: Partial<Task> & { title: string }) {
