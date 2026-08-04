@@ -1,5 +1,5 @@
 <script setup lang="ts">
-type ViewMode = "postit" | "kanban" | "graph" | "meetings" | "review" | "history";
+type ViewMode = "postit" | "kanban" | "graph" | "meetings" | "journal" | "review" | "history";
 
 const props = defineProps<{
   open: boolean;
@@ -56,6 +56,7 @@ function select(view: ViewMode) {
       </select>
       <button class="item" :class="{ active: view === 'graph' }" @click="select('graph')">Graph</button>
       <button class="item" :class="{ active: view === 'meetings' }" @click="select('meetings')">Meetings</button>
+      <button class="item" :class="{ active: view === 'journal' }" @click="select('journal')">Journal</button>
     </div>
 
     <div class="group">

@@ -35,6 +35,11 @@ export interface Meeting {
   recurs?: string;
 }
 
+export interface JournalEntrySummary {
+  date: string;
+  preview: string;
+}
+
 export interface ReviewItem {
   id: string;
   subject: string;

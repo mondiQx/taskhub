@@ -8,6 +8,7 @@ import KanbanView from "./views/KanbanView.vue";
 import PostItView from "./views/PostItView.vue";
 import GraphView from "./views/GraphView.vue";
 import MeetingsView from "./views/MeetingsView.vue";
+import JournalView from "./views/JournalView.vue";
 import ReviewQueueView from "./views/ReviewQueueView.vue";
 import HistoryView from "./views/HistoryView.vue";
 import TaskModal from "./components/TaskModal.vue";
@@ -28,7 +29,7 @@ function startMyDay() {
   automation.run();
 }
 
-type ViewMode = "postit" | "kanban" | "graph" | "meetings" | "review" | "history";
+type ViewMode = "postit" | "kanban" | "graph" | "meetings" | "journal" | "review" | "history";
 const view = ref<ViewMode>("postit");
 const groupBy = ref<"priority" | "time">("time");
 const postItGroupBy = ref<"time" | "category">("time");
@@ -103,6 +104,7 @@ onMounted(() => {
           @open="openTaskId = $event"
           @open-meeting="openNote = { folder: 'meetings', id: $event }"
         />
+        <JournalView v-else-if="view === 'journal'" @open-entry="openNote = { folder: 'journal', id: $event }" />
         <ReviewQueueView v-else-if="view === 'review'" />
         <HistoryView v-else @open="openTaskId = $event" />
       </main>

@@ -5,6 +5,7 @@ import { buildVaultGraph, readVaultFile, resolveVaultId } from "../vault/graph.j
 import { listVaultMeetings, listVaultMeetingsFull } from "../vault/meetingsRepository.js";
 import { getHistory, startMorningRun, stopMorningRun } from "../automation/morningRun.js";
 import { reviewQueueRepository } from "../vault/reviewQueue.js";
+import { appendJournalEntry, listJournalEntries } from "../vault/journalRepository.js";
 import type { NewTaskInput } from "../types.js";
 
 export const router = Router();
@@ -143,6 +144,20 @@ router.post("/review-queue/:id/dismiss", async (req, res) => {
   } catch (err) {
     res.status(404).json({ error: (err as Error).message });
   }
+});
+
+router.get("/journal", async (_req, res) => {
+  res.json(await listJournalEntries());
+});
+
+router.post("/journal", async (req, res) => {
+  const { text, section } = req.body as { text?: string; section?: "Journal" | "Personal notes" };
+  if (!text?.trim()) {
+    res.status(400).json({ error: "text is required" });
+    return;
+  }
+  const entry = await appendJournalEntry(text, section === "Personal notes" ? "Personal notes" : "Journal");
+  res.status(201).json(entry);
 });
 
 router.post("/voice-note", async (req, res) => {
