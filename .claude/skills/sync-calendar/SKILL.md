@@ -28,6 +28,32 @@ say so plainly and stop — don't fabricate calendar data.
 
 ## Steps
 
+0. **Load sync state.** Read `.data/sync-state.json` (repo root, not
+   under `vault/` — bookkeeping only, already covered by the repo's
+   `.data/` gitignore entry). Create it as `{}` if it doesn't exist yet.
+   Look at the `calendar` key (treat as `{ lastRunAt: null, events: {} }`
+   if absent).
+   - `events[<eventId>]` holds `{ signature: "<start>|<end>|<sorted
+     attendee emails>|<hangoutLink>", cachedFile: "<path>", at: "<ISO>" }`
+     from the last time this occurrence was processed. If a freshly
+     fetched occurrence's signature matches the cached one exactly,
+     nothing about it changed — skip re-processing it entirely (no
+     re-write to `vault/meetings/`, no re-run of the Participants/Related
+     linking in Step 4). This is what stops the same ~10 stable recurring
+     series from being re-verified line-by-line on every single run when
+     nothing about them changed. Only a series whose nearest occurrence
+     actually changed (new `start`, new attendees, new `hangoutLink`) goes
+     through the full Step 3/4 update-in-place logic.
+   - Set `calendar.lastRunAt` to now at the end of every run (Step 6) —
+     it mainly bounds how proactively the holiday scan (Step 3e) and
+     direct-report signal window (Step 3b) are worth re-checking, not the
+     `calendar:range` fetch itself (that script is already a bounded
+     14-day pull, so narrowing its input window isn't the bottleneck here
+     — the linking/verification work per event is).
+   - If the state file is missing/unreadable, fall back to processing
+     every fetched event in full, exactly as before, and say so in the
+     summary.
+
 1. **Load existing state.** List `vault/meetings/*.md` (dedup key: event
    title + start time, or filename `YYYY-MM-DD-<slug>.md`) and
    `vault/tasks/*.md`, reading frontmatter for existing `relatedMeeting.eventId`
@@ -325,18 +351,29 @@ If the action implied by an event is too vague to state concretely in
 `title`, don't create a task for it — log it in the summary as "possible
 follow-up, too vague to act on" instead of writing an incomplete task.
 
+## Step 6 — persist sync state
+
+Before reporting the summary, write back to `.data/sync-state.json`:
+
+- Set `calendar.lastRunAt` to now.
+- For every event processed this run (whether newly cached, updated, or
+  confirmed unchanged), upsert `calendar.events[<eventId>]` with its
+  current signature (see Step 0) and cache file path.
+- Leave entries for events not seen this run untouched.
+
 ## Notes
 
 - Read-only against the live Calendar API and the 24h reminder cache —
   never write to Calendar, never touch `.credentials/google.json`.
 - Never delete a meeting or task file, even if the calendar event is later
   cancelled — flag cancelled events in the summary instead.
-- Report a short summary: events cached, tasks created/linked/updated, any
-  events with an implied-but-too-vague follow-up, any staleness-override
-  skips (Step 3a, one line each with why), any direct-report signal found
-  or roundup task updated (Step 3b/3c), or none, and roughly how many
-  cached files got `## Participants`/`## Related` links (Step 4) vs. were
-  left unlinked because no real match existed. If a freshness check
-  (Step 3d) or holiday scan (Step 3e) ran, report their findings too —
-  what changed (or didn't), and which holidays got cached (or that none
-  were available yet).
+- Report a short summary: events cached, how many were skipped via
+  unchanged cached state vs. freshly processed, tasks created/linked/
+  updated, any events with an implied-but-too-vague follow-up, any
+  staleness-override skips (Step 3a, one line each with why), any
+  direct-report signal found or roundup task updated (Step 3b/3c), or
+  none, and roughly how many cached files got `## Participants`/
+  `## Related` links (Step 4) vs. were left unlinked because no real match
+  existed. If a freshness check (Step 3d) or holiday scan (Step 3e) ran,
+  report their findings too — what changed (or didn't), and which
+  holidays got cached (or that none were available yet).

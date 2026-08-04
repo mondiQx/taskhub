@@ -20,6 +20,59 @@ a task outright), or **queue** (genuinely ambiguous — hold for the user to
 decide). Never silently guess between skip and create for something
 ambiguous — queue it instead.
 
+## Step -1 — load sync state
+
+Read `.data/sync-state.json` (repo root, not under `vault/` — it's
+bookkeeping, not vault content; already covered by the repo's `.data/`
+gitignore entry). Create it as `{}` if it doesn't exist yet. Look at the
+`gmail` key (treat as `{ lastRunAt: null, threads: {} }` if absent).
+
+- **Normal run** (not an explicit backfill/wide-range request): narrow
+  Step 2's search window using `lastRunAt` instead of the fixed ~14 days —
+  round down to whole days and add a 2-day overlap buffer, e.g. if
+  `lastRunAt` was 3 days ago, search `newer_than:5d`. The buffer exists so
+  a thread right at the window's edge, or one that got a fresh reply just
+  after the last run, doesn't get missed.
+- If `lastRunAt` is missing, unreadable, or the file is corrupt, fall back
+  to the full ~14-day window exactly as before, and say so plainly in the
+  summary ("no prior sync state found, ran the full 14-day window") —
+  never let a bad state file silently narrow the search without flagging
+  it.
+- For an explicit backfill/date-range request, ignore `lastRunAt` and use
+  the requested range as today — but still update `gmail.lastRunAt` and
+  `gmail.threads` at the end (Step 5) so the *next* normal run goes back
+  to being incremental.
+- `threads[<threadId>]` holds `{ decision: "skip"|"create"|"queue"|
+  "declined", at: "<ISO>" }` from the last time this thread was
+  classified. A thread already recorded (any decision — `skip`,
+  `declined`, or `create`) that reappears with no newer message than the
+  recorded `at` doesn't need to be re-read or re-classified — reuse the
+  cached decision silently.
+- **A new reply always overrides the cache, regardless of prior
+  decision.** Compare the thread's latest message timestamp against the
+  recorded `at` before trusting any cached entry — `declined` and `skip`
+  are not permanent verdicts, they're "nothing new to decide as of last
+  time." If Gmail shows a message newer than `at`:
+  - **`create` (task already exists)**: this is already handled by Step 1's
+    existing-task check — append a `history` entry to the task the normal
+    way, same as any updated thread.
+  - **`skip` or `declined`**: don't silently re-skip or re-decline. Re-run
+    the full Step 3 categorization on the thread's current state (i.e.
+    judge it fresh, including the new message) — a thread you declined
+    because it was a vague FYI might now have someone directly asking you
+    something in the new reply, which changes the right bucket entirely.
+    If the new categorization lands on `queue`, add it back to the review
+    queue (Step 4) with a note that it was previously declined/skipped and
+    has a new reply since — don't assume the user's old decision still
+    applies to content they haven't seen yet. Note this specifically in
+    the summary ("re-opened thread:<id>, previously declined on <date>,
+    new reply from <sender> changed the picture") and append a line to
+    `gmail-decisions-log.md` recording the reopen, so the log stays an
+    honest trail rather than silently overwriting the earlier entry.
+  A thread with no new message since `at` is the only case that gets the
+  free pass — don't apply this override speculatively to threads that
+  genuinely haven't changed.
+
 ## Step 0 — resolve the existing review queue first
 
 Before searching Gmail, check for unresolved files in `vault/tasks/_inbox/`
@@ -27,11 +80,36 @@ named `gmail-review-*.md` (format described in Step 4). For each file:
 
 - For every line checked `[x]`, create the full task now (apply the
   Completeness rule below using the thread details recorded in that line),
-  then remove the line from the file.
+  then remove the line from the file. Append a line to
+  `vault/tasks/_inbox/gmail-decisions-log.md` recording this as an
+  **accepted** decision (see the log format below) — this is the same
+  permanent log the app's Review Queue UI writes to when you click
+  "Create task" there, so every accept/reject decision lives in one place
+  regardless of whether it happened via the UI or by checking a box here.
 - Leave every unchecked `[ ]` line in place — the user hasn't decided yet.
 - If the file ends up with no lines left, delete it.
+- **Decline detection.** Compare this file's current unchecked lines
+  against `threads[]` entries in the state file with `decision: "queue"`.
+  If a thread was queued in a prior run but its line no longer appears in
+  *any* `gmail-review-*.md` file and no task exists for it, the user
+  removed it by hand without checking it — record `decision: "declined"`
+  for that thread (today's date) in the state file, and append a
+  **declined** line to `gmail-decisions-log.md` the same way.
 
-Report how many were promoted from the queue before moving on to Step 1.
+**Log format** (create `gmail-decisions-log.md` with a one-line header if
+it doesn't exist yet; always append, never overwrite or reorder existing
+lines):
+
+```
+- [x] <subject> — accepted, created task <task-id> — thread:<id>, from:<sender> — <ISO timestamp>
+- [ ] <subject> — declined — thread:<id>, from:<sender> — <ISO timestamp>
+```
+
+This file is a permanent record, not a queue — never re-parse it as
+pending items, and never delete lines from it.
+
+Report how many were promoted from the queue (and any newly-detected
+declines) before moving on to Step 1.
 
 ## Step 1 — load existing tasks
 
@@ -46,7 +124,8 @@ reply), appending a `history` entry rather than recreating the file.
 If a Gmail MCP tool isn't already loaded, use ToolSearch (e.g.
 `search_threads` / `get_thread` / `get_message`). Search for starred or
 important threads (`is:starred OR is:important`) from the last ~14 days
-unless the user gives a different range.
+unless the user gives a different range, or Step -1's narrowed window
+applies (the common case for a routine daily/morning run).
 
 ## Step 3 — categorize every new thread
 
@@ -182,17 +261,36 @@ be a guessed placeholder:
 If you cannot determine `title` with confidence, don't create the file —
 note it in the summary instead.
 
+## Step 5 — persist sync state
+
+Before reporting the summary, write back to `.data/sync-state.json`:
+
+- Set `gmail.lastRunAt` to now.
+- For every thread classified this run (create/skip/queue/declined),
+  upsert its entry in `gmail.threads`. Recording the skip-category
+  decisions is the main point of this step — it's what lets the *next*
+  run avoid re-reading and re-classifying known noise (GitHub bot mail,
+  password resets, etc.) at all.
+- Leave entries for threads not seen this run untouched — don't prune;
+  they're cheap to keep and pruning risks re-processing something that
+  scrolled out of the current search window.
+
 ## Notes
 
 - This skill only ever creates or updates files under `vault/tasks/` (plus
-  its own `_inbox/` review files) — it never deletes tasks, even if the
-  source email disappears. Leave that judgment to the user.
+  its own `_inbox/` review files, including the permanent
+  `gmail-decisions-log.md`) and `.data/sync-state.json` — it never
+  deletes tasks, even if the source email disappears. Leave that judgment
+  to the user.
 - If the Gmail MCP connection isn't available in the current session, say
   so plainly and stop — don't fabricate tasks.
 - Report a short summary at the end: tasks promoted from the queue, tasks
   created this run, tasks updated vs. left untouched, threads skipped (by
-  category, with a count — not each one individually), how many new
-  items are waiting in the review queue, any staleness-override skips
-  (Step 3b, one line each with why), any recognition/rewards found for a
-  direct report (or none), and any long-running thread that turned out
-  to still be live.
+  category, with a count — not each one individually), how many threads
+  were skipped silently via cached state vs. freshly classified this run,
+  any newly-detected declines, any **previously skipped/declined threads
+  that got a new reply and were re-opened/re-classified** (one line each —
+  old decision, new decision, why), how many new items are waiting in the
+  review queue, any staleness-override skips (Step 3b, one line each with
+  why), any recognition/rewards found for a direct report (or none), and
+  any long-running thread that turned out to still be live.

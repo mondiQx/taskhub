@@ -15,7 +15,10 @@ auth-hardening, or enterprise patterns — optimize for "one person, one Mac".
   only folder the kanban/list/post-it board reads from.
 - `vault/notes/` — long-lived freeform knowledge-base notes, not tasks.
 - `vault/journal/` — daily notebook-journal files, `YYYY-MM-DD.md`, for quick
-  post-it-style capture that isn't a task.
+  post-it-style capture that isn't a task. A `## Journal` section holds raw,
+  unedited brain-dump text (see the `journal` skill); a `## Personal notes`
+  section holds reflective/non-actionable content (career interests,
+  frustrations, morale) that doesn't belong in any task or meeting note.
 - `vault/reports/` — the actual reports (docs/decks) live in Google Drive,
   not here, but this folder does hold **comprehensive synthesized
   summaries**, not just pointer stubs. Layout per report series:
@@ -102,6 +105,19 @@ connections. Run them individually via `/sync-gmail`, `/sync-jira`,
 
 ## Automation
 
+- `.data/sync-state.json` — bookkeeping used by `sync-gmail`/`sync-jira`/
+  `sync-calendar` to avoid re-reading/re-classifying the same threads,
+  issues, and calendar occurrences on every run (tracks `lastRunAt` +
+  per-item decisions per source). Not vault content — gitignored, safe to
+  delete if it ever looks wrong (each skill falls back to a full scan when
+  it's missing).
+- `vault/tasks/_inbox/gmail-decisions-log.md` — permanent, append-only
+  record of every accept/reject decision made on a Gmail review-queue
+  item, whether done via the web app's Review Queue view ("Create task"/
+  "Dismiss" buttons) or by hand-checking/deleting a line in a
+  `gmail-review-*.md` file. Unlike the queue files themselves (whose lines
+  disappear once resolved), this log is never trimmed — it's how you can
+  go back and see what you decided and when.
 - `/briefing` (`daily-briefing` skill) — read-only summary of overdue/
   due-soon tasks, today's meetings, and pending review-queue items.
 - `/draft-followups` (`draft-followups` skill) — prepares Gmail drafts and
@@ -111,6 +127,12 @@ connections. Run them individually via `/sync-gmail`, `/sync-jira`,
 - `/morning` — runs sync-gmail → sync-jira → sync-calendar →
   daily-briefing → draft-followups in sequence, so later steps see the
   freshly-synced vault.
+- `/journal` (`journal` skill) — for a raw, mixed-topic brain dump (typed or
+  dictated). Always writes the input verbatim to `vault/journal/<today>.md`
+  first, then proposes extracted task updates/new tasks/meeting recaps via
+  `vault/tasks/_inbox/journal-review-<today>.md` for confirmation rather
+  than applying fuzzy-matched changes silently — mirrors the `sync-gmail`
+  review-queue pattern. Only unambiguous references get applied directly.
 - `scripts/morning-run.sh` + `scripts/com.raymond.task-hub.morning.plist` —
   a macOS LaunchAgent that fires `/morning` headlessly at 07:45 local time
   when the laptop is on and logged in. Not installed by default; see the

@@ -34,12 +34,44 @@ after. See Step 2's verification pass for a second line of defense.
 
 ## Steps
 
+0. **Load sync state.** Read `.data/sync-state.json` (repo root, not
+   under `vault/` — bookkeeping only, already covered by the repo's
+   `.data/` gitignore entry). Create it as `{}` if it doesn't exist yet.
+   Look at the `jira` key (treat as `{ lastRunAt: null, issues: {} }` if
+   absent).
+   - **Normal run** (not an explicit backfill): this is what Step 2's JQL
+     below uses to narrow the search — see there.
+   - If `lastRunAt` is missing, unreadable, or the file is corrupt, fall
+     back to the full unbounded `resolution = Unresolved` query exactly
+     as before, and say so plainly in the summary.
+   - For an explicit backfill/date-range request, ignore `lastRunAt` and
+     use the requested range as today — but still update
+     `jira.lastRunAt`/`jira.issues` at the end (Step 5) so the *next*
+     normal run goes back to being incremental.
+   - `issues[<KEY>]` holds `{ updated: "<Jira's own updated timestamp at
+     classification time>", verdict: "created"|"updated"|"dormant"|
+     "skipped-stale", at: "<ISO>" }`. If a cached issue's `updated` still
+     matches what Jira reports now, nothing about it has changed — reuse
+     the cached verdict without re-fetching `comment` or parent-epic data
+     for it. This is what stops the same dormant Analytics/Team Store
+     issues from being re-walked through the scattered-initiative check
+     every single day. Only re-classify when Jira's `updated` is newer
+     than the cached value.
+
 1. **Load existing tasks.** List `vault/tasks/*.md` and read each file's
    frontmatter to build a set of known `source.externalId` values.
 
 2. **Search Jira.** If an Atlassian MCP tool isn't already loaded, use
-   ToolSearch (e.g. `searchJiraIssuesUsingJql`, `getJiraIssue`). Run JQL:
-   `assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC`.
+   ToolSearch (e.g. `searchJiraIssuesUsingJql`, `getJiraIssue`). For a
+   normal run, narrow the query using Step 0's `lastRunAt` (minus a 1-day
+   overlap buffer): `assignee = currentUser() AND resolution = Unresolved
+   AND updated >= "<lastRunAt minus 1 day, YYYY-MM-DD HH:mm>" ORDER BY
+   updated DESC`. This is the single biggest cost-saver in this skill — it
+   stops issues nothing has touched since yesterday (including the
+   dormant scattered-initiative backlog) from being re-fetched and
+   re-classified on every run at all. If `lastRunAt` is absent (see Step
+   0), fall back to the unbounded `assignee = currentUser() AND
+   resolution = Unresolved ORDER BY updated DESC`.
    For a backfill or explicit date range, instead scope with
    `assignee = currentUser() AND updated >= "<range-start>" AND updated <= "<range-end>" ORDER BY updated ASC`
    (don't restrict to `resolution = Unresolved` for a backfill — resolved
@@ -244,17 +276,29 @@ be a guessed placeholder:
 If `title` can't be read from the issue (shouldn't happen), skip that issue,
 note it in the summary, and move on rather than writing an incomplete task.
 
+## Step 5 — persist sync state
+
+Before reporting the summary, write back to `.data/sync-state.json`:
+
+- Set `jira.lastRunAt` to now.
+- For every issue classified this run (created/updated/dormant/skipped-
+  stale), upsert `jira.issues[<KEY>]` with its current Jira `updated`
+  timestamp and verdict.
+- Leave entries for issues not seen this run untouched.
+
 ## Notes
 
-- This skill only ever creates or updates files under `vault/tasks/` — it
-  never deletes tasks, even if the Jira issue is later closed or deleted.
-  Leave that judgment to the user.
+- This skill only ever creates or updates files under `vault/tasks/` and
+  `.data/sync-state.json` — it never deletes tasks, even if the Jira issue
+  is later closed or deleted. Leave that judgment to the user.
 - If the Atlassian MCP connection isn't available in the current session,
   say so plainly and stop — don't fabricate tasks.
 - Report a short summary at the end: how many new tasks were created, how
-  many existing tasks were updated vs. left untouched, any issues skipped
-  for incompleteness, any staleness-override skips (Step 3, one line each
-  with why), any duplicates found and removed by Step 2's verification
-  pass (or confirmation that none were found), any recognition/rewards
-  found for a direct report (or none), and any long-running ticket that
-  turned out to still be live.
+  many existing tasks were updated vs. left untouched, how many issues
+  were skipped via cached state (not re-fetched at all) vs. freshly
+  classified this run, any issues skipped for incompleteness, any
+  staleness-override skips (Step 3, one line each with why), any
+  duplicates found and removed by Step 2's verification pass (or
+  confirmation that none were found), any recognition/rewards found for a
+  direct report (or none), and any long-running ticket that turned out to
+  still be live.
