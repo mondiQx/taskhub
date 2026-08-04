@@ -41,7 +41,7 @@ watch(
 
 type Cell =
   | { type: "note"; task: Task }
-  | { type: "folder"; key: string; label: string; count: number; previews: string[]; expanded: boolean };
+  | { type: "folder"; key: string; label: string; count: number; newCount: number; previews: string[]; expanded: boolean };
 
 const groups = computed(() => (props.groupBy === "time" ? byTimePeriod.value : byCategory.value));
 
@@ -51,7 +51,8 @@ const cells = computed<Cell[]>(() => {
     if (!group.tasks.length) continue;
     const expanded = expandedKeys.value.has(group.key);
     const previews = group.tasks.slice(0, 4).map((t) => colorForId(t.id));
-    out.push({ type: "folder", key: group.key, label: group.label, count: group.tasks.length, previews, expanded });
+    const newCount = group.tasks.filter((t) => t.seenAt === null).length;
+    out.push({ type: "folder", key: group.key, label: group.label, count: group.tasks.length, newCount, previews, expanded });
     if (expanded) {
       for (const task of group.tasks) out.push({ type: "note", task });
     }
@@ -184,6 +185,7 @@ function closeAddModal() {
             <PostItFolder
               :label="cell.label"
               :count="cell.count"
+              :new-count="cell.newCount"
               :previews="cell.previews"
               :expanded="cell.expanded"
               :drop-target="props.groupBy === 'time'"

@@ -22,6 +22,7 @@ function onDragStart(e: DragEvent) {
     @dragstart="draggable && onDragStart($event)"
     @click="emit('open', task.id)"
   >
+    <span v-if="task.seenAt === null" class="new-dot" title="New since last time you looked"></span>
     <label @click.stop>
       <input
         type="checkbox"
@@ -35,6 +36,7 @@ function onDragStart(e: DragEvent) {
 
 <style scoped>
 .note {
+  position: relative;
   aspect-ratio: 1;
   padding: var(--space-3);
   border-radius: var(--radius-sm);
@@ -45,6 +47,16 @@ function onDragStart(e: DragEvent) {
   flex-direction: column;
   gap: var(--space-2);
   transition: transform 160ms var(--ease), box-shadow 160ms var(--ease);
+}
+.new-dot {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: #e5484d;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.6);
 }
 .note:nth-child(even) { transform: rotate(1deg); }
 .note:hover { transform: rotate(0deg) translateY(-2px); box-shadow: 3px 6px 14px rgba(var(--shadow-tint), 0.28); }

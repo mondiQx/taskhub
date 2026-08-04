@@ -30,7 +30,10 @@ function onDragStart(e: DragEvent) {
       />
     </label>
     <div class="body">
-      <div class="title">{{ task.title }}</div>
+      <div class="title">
+        <span v-if="task.seenAt === null" class="new-badge">NEW</span>
+        {{ task.title }}
+      </div>
       <div class="meta">
         <span class="source">{{ task.source.type }}</span>
         <span v-if="task.due" class="due" :class="{ overdue: isOverdue }">
@@ -63,6 +66,19 @@ function onDragStart(e: DragEvent) {
 .done { opacity: 0.55; text-decoration: line-through; }
 .body { flex: 1; min-width: 0; }
 .title { font-weight: 600; font-size: 0.9rem; word-break: break-word; }
+.new-badge {
+  display: inline-block;
+  background: #e5484d;
+  color: white;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border-radius: 999px;
+  padding: 0.1rem 0.4rem;
+  margin-right: 0.35rem;
+  vertical-align: middle;
+  transform: translateY(-1px);
+}
 .meta { display: flex; gap: var(--space-2); font-size: 0.75rem; opacity: 0.75; margin-top: var(--space-1); }
 .due.overdue { color: #e5484d; font-weight: 600; }
 </style>

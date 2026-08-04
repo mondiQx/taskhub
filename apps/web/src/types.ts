@@ -57,6 +57,7 @@ export interface Task {
   created: string;
   due: string | null;
   completedAt: string | null;
+  seenAt: string | null;
   tags: string[];
   source: TaskSource;
   relatedMeeting: RelatedMeeting | null;

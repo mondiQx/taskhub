@@ -73,6 +73,14 @@ class TaskRepository extends EventEmitter {
     return this.update(id, { status: "open", completedAt: null }, { event: "reopened", note });
   }
 
+  /** Marks a task as opened/read — deliberately no historyEvent, so glancing at a task doesn't spam its edit history. */
+  async markSeen(id: string): Promise<Task> {
+    const existing = this.tasks.get(id);
+    if (!existing) throw new Error(`Task ${id} not found`);
+    if (existing.seenAt !== null) return existing; // already seen — no-op, avoids a redundant file write
+    return this.update(id, { seenAt: new Date().toISOString() });
+  }
+
   async delete(id: string): Promise<void> {
     const existing = this.tasks.get(id);
     if (!existing) throw new Error(`Task ${id} not found`);

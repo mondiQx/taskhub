@@ -80,6 +80,15 @@ router.patch("/tasks/:id", async (req, res) => {
   }
 });
 
+router.post("/tasks/:id/seen", async (req, res) => {
+  try {
+    const task = await taskRepository.markSeen(req.params.id);
+    res.json(task);
+  } catch (err) {
+    res.status(404).json({ error: (err as Error).message });
+  }
+});
+
 router.delete("/tasks/:id", async (req, res) => {
   try {
     await taskRepository.delete(req.params.id);

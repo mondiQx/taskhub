@@ -43,9 +43,18 @@ function stringifyDates(value: unknown): unknown {
 
 export function parseTaskFile(filePath: string, raw: string): Task {
   const parsed = matter(raw);
+  // Files written before the "New" badge existed have no seenAt key at all —
+  // treat those as already-seen (not a flood of "new" badges on rollout).
+  // An explicit `seenAt: null` (written by buildNewTask or a sync skill) means
+  // genuinely never opened yet, and must be preserved as null. Check the raw
+  // frontmatter for key presence before the typed cast below erases that
+  // distinction (a missing key and an explicit `undefined` look the same
+  // once cast to `Omit<Task, ...>`).
+  const hasSeenAt = "seenAt" in parsed.data;
   const fm = stringifyDates(parsed.data) as Omit<Task, "body" | "filePath">;
   return {
     ...fm,
+    seenAt: hasSeenAt ? fm.seenAt : fm.created,
     body: stripHistorySection(parsed.content.trim()),
     filePath,
   };
@@ -76,6 +85,7 @@ export function buildNewTask(input: NewTaskInput): Task {
     created: now,
     due: input.due ?? null,
     completedAt: null,
+    seenAt: null,
     tags: input.tags ?? [],
     source: input.source ?? { type: "manual", externalId: null, url: null },
     relatedMeeting: input.relatedMeeting ?? null,

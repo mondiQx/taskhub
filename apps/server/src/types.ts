@@ -29,6 +29,8 @@ export interface Task {
   created: string;
   due: string | null;
   completedAt: string | null;
+  /** null until a user opens the task (on any device) — drives the "New" badge. Not a history event. */
+  seenAt: string | null;
   tags: string[];
   source: TaskSource;
   relatedMeeting: RelatedMeeting | null;

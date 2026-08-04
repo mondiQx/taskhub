@@ -2,7 +2,14 @@
 import { ref } from "vue";
 import { motion } from "motion-v";
 
-const props = defineProps<{ label: string; count: number; previews?: string[]; expanded?: boolean; dropTarget?: boolean }>();
+const props = defineProps<{
+  label: string;
+  count: number;
+  newCount?: number;
+  previews?: string[];
+  expanded?: boolean;
+  dropTarget?: boolean;
+}>();
 const emit = defineEmits<{ toggle: []; drop: [taskId: string] }>();
 
 const SLOTS = 4;
@@ -32,6 +39,7 @@ function onDrop(e: DragEvent) {
     <span class="tile">
       <span v-for="i in SLOTS" :key="i" class="chip" :style="{ background: previews?.[i - 1] ?? 'rgba(var(--shadow-tint), 0.12)' }" />
       <span class="badge">{{ count }}</span>
+      <span v-if="newCount" class="new-badge" :title="`${newCount} new since you last looked`">{{ newCount }}</span>
     </span>
     <p class="label">{{ label }}</p>
   </motion.button>
@@ -94,6 +102,23 @@ function onDrop(e: DragEvent) {
   color: white;
   font-size: 0.68rem;
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-sm);
+}
+.new-badge {
+  position: absolute;
+  top: -6px;
+  left: -6px;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: #e5484d;
+  color: white;
+  font-size: 0.68rem;
+  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;

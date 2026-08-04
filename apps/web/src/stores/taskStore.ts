@@ -118,6 +118,11 @@ export const useTaskStore = defineStore("tasks", {
       });
     },
 
+    /** Clears the "New" badge for this task on every connected device (server owns seenAt, broadcast over the socket). */
+    async markSeen(id: string) {
+      await fetch(`/api/tasks/${id}/seen`, { method: "POST" });
+    },
+
     async deleteTask(id: string) {
       await fetch(`/api/tasks/${id}`, { method: "DELETE" });
       this.tasks = this.tasks.filter((t) => t.id !== id);

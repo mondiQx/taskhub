@@ -55,6 +55,7 @@ priority: high             # low | medium | high | urgent
 created: 2026-07-24T09:12:00-04:00
 due: 2026-08-05T17:00:00-04:00     # optional
 completedAt: null
+seenAt: null              # null until opened on any device — drives the "New" badge; not a history event
 tags: [contracts, legal]
 source:
   type: gmail              # gmail | jira | slack | gcal | manual | voice

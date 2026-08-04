@@ -38,9 +38,13 @@ const openNote = ref<{ folder: string; id: string } | null>(null);
 
 const openTask = computed(() => store.tasks.find((t) => t.id === openTaskId.value) ?? null);
 
+function openTaskById(id: string) {
+  openTaskId.value = id;
+  store.markSeen(id);
+}
 function openTaskFromNote(taskId: string) {
   openNote.value = null;
-  openTaskId.value = taskId;
+  openTaskById(taskId);
 }
 function openNoteFromNote(folder: string, id: string) {
   openTaskId.value = null;
@@ -89,24 +93,24 @@ onMounted(() => {
         <PostItView
           v-if="view === 'postit'"
           :group-by="postItGroupBy"
-          @open="openTaskId = $event"
+          @open="openTaskById"
           @open-meeting="openNote = { folder: 'meetings', id: $event }"
         />
         <KanbanView
           v-else-if="view === 'kanban'"
           :group-by="groupBy"
-          @open="openTaskId = $event"
+          @open="openTaskById"
           @open-meeting="openNote = { folder: 'meetings', id: $event }"
         />
-        <GraphView v-else-if="view === 'graph'" @open="openTaskId = $event" @open-note="(folder, id) => (openNote = { folder, id })" />
+        <GraphView v-else-if="view === 'graph'" @open="openTaskById" @open-note="(folder, id) => (openNote = { folder, id })" />
         <MeetingsView
           v-else-if="view === 'meetings'"
-          @open="openTaskId = $event"
+          @open="openTaskById"
           @open-meeting="openNote = { folder: 'meetings', id: $event }"
         />
         <JournalView v-else-if="view === 'journal'" @open-entry="openNote = { folder: 'journal', id: $event }" />
         <ReviewQueueView v-else-if="view === 'review'" />
-        <HistoryView v-else @open="openTaskId = $event" />
+        <HistoryView v-else @open="openTaskById" />
       </main>
     </div>
 
