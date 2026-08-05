@@ -92,7 +92,12 @@ assume they're already done.
   specific change — that would defeat the entire point of this setup.
 - Do not commit `.env`, `.credentials/`, or `.data/` — they're gitignored
   for a reason (OAuth secrets, tokens, automation history).
-- Do not run the production server (`npm run start`) and the dev server
-  (`npm run dev`) on the same port at the same time — dev uses 5173
-  (Vite) + 4173 (API); production serves everything on 4173 alone. Check
-  `lsof -i :4173` before starting either if unsure what's already running.
+- `npm run dev`'s server side now defaults to `SERVER_PORT=4174` (see
+  `apps/web/vite.config.ts`'s proxy and the root `package.json` dev
+  script) specifically so it can run alongside the production LaunchAgent
+  on 4173 without a port clash. Don't hardcode 4173 back into the dev
+  path — if a dev port conflict still comes up, check `lsof -i :4174` /
+  `:5173` rather than assuming it's the production server.
+- To start/stop/check the production LaunchAgent itself, use the
+  `connect-phone` skill rather than raw `launchctl` calls, so status
+  reporting stays consistent.

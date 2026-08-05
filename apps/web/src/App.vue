@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from "vue";
 import { useTaskStore } from "./stores/taskStore";
 import { useAutomationStore } from "./stores/automationStore";
 import { useReviewQueueStore } from "./stores/reviewQueueStore";
+import { useJournalReviewStore } from "./stores/journalReviewStore";
 import { useNotifications } from "./composables/useNotifications";
 import KanbanView from "./views/KanbanView.vue";
 import PostItView from "./views/PostItView.vue";
@@ -20,13 +21,41 @@ import AppSidebar from "./components/AppSidebar.vue";
 const store = useTaskStore();
 const automation = useAutomationStore();
 const reviewQueue = useReviewQueueStore();
+const journalReview = useJournalReviewStore();
 const notifications = useNotifications();
 const showMorningRun = ref(false);
-const sidebarOpen = ref(true);
+// Desktop keeps the sidebar in-flow and open by default; mobile only ever
+// shows it as an overlay drawer, so it should start collapsed there.
+const sidebarOpen = ref(window.matchMedia("(min-width: 768px)").matches);
 
 function startMyDay() {
   showMorningRun.value = true;
   automation.run();
+}
+
+const START_HOLD_MS = 500;
+const startHolding = ref(false);
+let startHoldTimer: number | undefined;
+const isMobile = () => !window.matchMedia("(min-width: 768px)").matches;
+
+function startHoldToBegin() {
+  if (!isMobile() || automation.current?.status === "running" || startHolding.value) return;
+  startHolding.value = true;
+  startHoldTimer = window.setTimeout(() => {
+    startHolding.value = false;
+    startMyDay();
+  }, START_HOLD_MS);
+}
+function cancelStartHold() {
+  startHolding.value = false;
+  if (startHoldTimer !== undefined) {
+    clearTimeout(startHoldTimer);
+    startHoldTimer = undefined;
+  }
+}
+function startMyDayClick() {
+  if (isMobile()) return; // mobile requires the hold gesture instead of a plain click
+  startMyDay();
 }
 
 type ViewMode = "postit" | "kanban" | "graph" | "meetings" | "journal" | "review" | "history";
@@ -55,6 +84,7 @@ onMounted(() => {
   store.init();
   automation.init();
   reviewQueue.init();
+  journalReview.init();
 });
 </script>
 
@@ -64,11 +94,30 @@ onMounted(() => {
       <button class="menu-btn" @click="sidebarOpen = true" aria-label="Open menu">☰</button>
       <h1>Task Hub</h1>
       <div class="right">
-        <button class="start-my-day" :disabled="automation.current?.status === 'running'" @click="startMyDay">
-          {{ automation.current?.status === "running" ? "Running…" : "Start my day" }}
+        <button
+          class="start-my-day"
+          :class="{ holding: startHolding }"
+          :disabled="automation.current?.status === 'running'"
+          :title="isMobile() ? 'Hold to start' : undefined"
+          @click="startMyDayClick"
+          @pointerdown="startHoldToBegin"
+          @pointerup="cancelStartHold"
+          @pointerleave="cancelStartHold"
+          @pointercancel="cancelStartHold"
+        >
+          <span class="start-my-day-fill" :style="{ transitionDuration: startHolding ? `${START_HOLD_MS}ms` : '0ms' }"></span>
+          <span class="start-my-day-label">
+            {{ automation.current?.status === "running" ? "Running…" : startHolding ? "Keep holding…" : "Start my day" }}
+          </span>
         </button>
-        <button class="toggle-done" :class="{ active: !store.showDone }" @click="store.toggleShowDone()">
-          {{ store.showDone ? "Hide done" : "Show done" }}
+        <button
+          class="toggle-done"
+          :class="{ active: !store.showDone }"
+          :title="store.showDone ? 'Hide done' : 'Show done'"
+          :aria-label="store.showDone ? 'Hide done' : 'Show done'"
+          @click="store.toggleShowDone()"
+        >
+          <span class="toggle-done-icon">{{ store.showDone ? "👁️" : "🚫" }}</span>
         </button>
         <span class="status" :class="{ connected: store.connected }">{{ store.connected ? "live" : "reconnecting…" }}</span>
       </div>
@@ -83,7 +132,12 @@ onMounted(() => {
         :review-count="reviewQueue.items.length"
         :notifications-granted="notifications.permission === 'granted'"
         @close="sidebarOpen = false"
-        @update:view="view = $event"
+        @update:view="
+          (v) => {
+            view = v;
+            if (isMobile()) sidebarOpen = false;
+          }
+        "
         @update:group-by="groupBy = $event"
         @update:post-it-group-by="postItGroupBy = $event"
         @request-notifications="notifications.requestPermission()"
@@ -219,8 +273,19 @@ header h1 { font-size: 1rem; font-weight: 600; letter-spacing: -0.01em; margin: 
 .right button:hover { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.45); }
 .right button:active { transform: scale(0.97); }
 .toggle-done.active { background: rgba(255, 255, 255, 0.16); border-color: rgba(255, 255, 255, 0.5); }
-.start-my-day { background: var(--color-accent); border-color: var(--color-accent); font-weight: 600; }
+.toggle-done-icon { font-size: 0.95rem; line-height: 1; }
+.start-my-day {
+  position: relative; overflow: hidden;
+  background: var(--color-accent); border-color: var(--color-accent); font-weight: 600;
+  touch-action: none; user-select: none; -webkit-user-select: none;
+}
 .start-my-day:disabled { opacity: 0.7; cursor: default; }
+.start-my-day-fill {
+  position: absolute; inset: 0; width: 0%; background: rgba(255, 255, 255, 0.35);
+  transition-property: width; transition-timing-function: linear;
+}
+.start-my-day.holding .start-my-day-fill { width: 100%; }
+.start-my-day-label { position: relative; z-index: 1; }
 .right { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .status { font-size: 0.75rem; opacity: 0.6; white-space: nowrap; }
 .status.connected { opacity: 1; color: #8be28b; }

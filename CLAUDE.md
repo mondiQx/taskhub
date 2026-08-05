@@ -86,6 +86,16 @@ The `## History` section in the body is a human-readable mirror of the same
 events, auto-appended whenever the frontmatter `history` array grows — keep
 both in sync on every write.
 
+## Tag conventions
+
+`vault/notes/tag-glossary.md` is the canonical list of person/project tag
+spellings. Fuzzy-reference resolution (in `/journal`, `/sync-gmail`,
+`audit-vault`, etc.) leans on tags matching consistently across files —
+a person tag that doesn't match their note's filename id, or a project
+tag that's a near-duplicate of one already in use, silently breaks that
+lookup. Check the glossary before inventing a new tag; add to it once a
+new one is settled.
+
 ## Dedup rule (important)
 
 Before creating a new task file for anything ingested from an external
@@ -106,6 +116,13 @@ connections. Run them individually via `/sync-gmail`, `/sync-jira`,
 
 ## Automation
 
+- `GET /api/vault/search?q=<terms>` — local, offline fuzzy/typo-tolerant
+  lexical search (MiniSearch) over every task/note/meeting/journal file's
+  title+tags+body. No embeddings, no network calls, nothing billed. Any
+  skill resolving a fuzzy reference ("the SRE tickets", "the IDV meeting")
+  should prefer this (and `GET /api/graph` for backlinks) over raw grep —
+  see the `journal` skill for the fuller resolution order and
+  `vault/notes/tag-glossary.md` for canonical tag spellings.
 - `.data/sync-state.json` — bookkeeping used by `sync-gmail`/`sync-jira`/
   `sync-calendar` to avoid re-reading/re-classifying the same threads,
   issues, and calendar occurrences on every run (tracks `lastRunAt` +

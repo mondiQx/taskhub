@@ -127,10 +127,16 @@ function select(view: ViewMode) {
   border: 1px solid rgba(255, 255, 255, 0.28); border-radius: var(--radius-sm);
   padding: 0.35rem var(--space-2); margin: 0 0 0 var(--space-2);
 }
-.sidebar-footer { margin-top: auto; display: flex; flex-direction: column; gap: var(--space-1); }
+.sidebar-footer {
+  margin-top: auto; display: flex; flex-direction: column; gap: var(--space-1);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
 
 @media (max-width: 480px) {
   .sidebar { width: 82vw; }
+  /* Extra clearance above the phone's home-indicator/gesture nav bar, on top
+     of whatever env(safe-area-inset-bottom) already accounts for. */
+  .sidebar-footer { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--space-4)); }
 }
 
 /* On wide screens the sidebar lives in-flow next to <main> (pushing it, not

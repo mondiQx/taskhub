@@ -11,6 +11,7 @@ export function useVoiceCapture(onStopped: (transcript: string) => void) {
   const supported = Boolean(SpeechRecognitionCtor);
   const recording = ref(false);
   const interimTranscript = ref("");
+  const error = ref<string | null>(null);
 
   let recognition: SpeechRecognition | undefined;
   let finalSegments: string[] = [];
@@ -18,6 +19,15 @@ export function useVoiceCapture(onStopped: (transcript: string) => void) {
 
   function start() {
     if (!SpeechRecognitionCtor || recording.value) return;
+    error.value = null;
+    // SpeechRecognition (like getUserMedia) only works in a secure context —
+    // https:// or localhost. Served over plain http:// (e.g. a Tailscale IP/
+    // hostname without TLS), the browser silently refuses to even show the
+    // mic permission prompt, which looks identical to a broken mic.
+    if (!window.isSecureContext) {
+      error.value = "Voice input needs a secure connection (https). This page was loaded over plain http.";
+      return;
+    }
     finalSegments = [];
     stoppedManually = false;
     recognition = new SpeechRecognitionCtor();
@@ -34,6 +44,14 @@ export function useVoiceCapture(onStopped: (transcript: string) => void) {
       }
       interimTranscript.value = interimText;
     };
+    // The lib.dom types this project uses don't declare onerror/error on
+    // SpeechRecognition, though every implementing browser supports it.
+    (recognition as any).onerror = (event: { error: string }) => {
+      error.value =
+        event.error === "not-allowed" || event.error === "service-not-allowed"
+          ? "Microphone access was denied. Check your browser/site permissions."
+          : `Voice input error: ${event.error}`;
+    };
     recognition.onend = () => {
       recording.value = false;
       interimTranscript.value = "";
@@ -45,8 +63,12 @@ export function useVoiceCapture(onStopped: (transcript: string) => void) {
       }
     };
 
-    recognition.start();
-    recording.value = true;
+    try {
+      recognition.start();
+      recording.value = true;
+    } catch {
+      error.value = "Couldn't start voice input.";
+    }
   }
 
   function stop() {
@@ -55,5 +77,5 @@ export function useVoiceCapture(onStopped: (transcript: string) => void) {
   }
 
   // reactive() so nested ref properties (recording, interimTranscript) auto-unwrap in templates.
-  return reactive({ supported, recording, interimTranscript, start, stop });
+  return reactive({ supported, recording, interimTranscript, error, start, stop });
 }

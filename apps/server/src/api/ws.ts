@@ -2,7 +2,9 @@ import type { Server as HttpServer } from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
 import { taskRepository, type TaskChangeEvent } from "../vault/taskRepository.js";
 import { getHistory, morningEvents, type MorningRun } from "../automation/morningRun.js";
+import { getJournalAnalysisHistory, journalAnalysisEvents, type JournalAnalysisRun } from "../automation/journalAnalysisRun.js";
 import { reviewQueueRepository, type ReviewChangeEvent, type ReviewItem } from "../vault/reviewQueue.js";
+import { journalReviewRepository, type JournalReviewChangeEvent, type JournalReviewItem } from "../vault/journalReview.js";
 
 export type ServerEvent =
   | { channel: "task"; payload: TaskChangeEvent }
@@ -10,8 +12,11 @@ export type ServerEvent =
   | { channel: "meeting"; payload: { taskId: string; title: string; note: string } }
   | { channel: "meeting"; payload: { title: string; minutesUntil: number } }
   | { channel: "morning"; payload: MorningRun }
+  | { channel: "journal-analysis"; payload: JournalAnalysisRun }
   | { channel: "review"; payload: ReviewChangeEvent }
-  | { channel: "review-snapshot"; payload: { items: ReviewItem[] } };
+  | { channel: "review-snapshot"; payload: { items: ReviewItem[] } }
+  | { channel: "journal-review"; payload: JournalReviewChangeEvent }
+  | { channel: "journal-review-snapshot"; payload: { items: JournalReviewItem[] } };
 
 let wss: WebSocketServer | undefined;
 
@@ -26,8 +31,16 @@ export function startWebSocketServer(server: HttpServer): void {
     broadcast({ channel: "morning", payload: run });
   });
 
+  journalAnalysisEvents.on("change", (run: JournalAnalysisRun) => {
+    broadcast({ channel: "journal-analysis", payload: run });
+  });
+
   reviewQueueRepository.on("change", (event: ReviewChangeEvent) => {
     broadcast({ channel: "review", payload: event });
+  });
+
+  journalReviewRepository.on("change", (event: JournalReviewChangeEvent) => {
+    broadcast({ channel: "journal-review", payload: event });
   });
 
   wss.on("connection", async (socket) => {
@@ -35,8 +48,18 @@ export function startWebSocketServer(server: HttpServer): void {
     socket.send(
       JSON.stringify({ channel: "review-snapshot", payload: { items: await reviewQueueRepository.list() } } satisfies ServerEvent),
     );
+    socket.send(
+      JSON.stringify({
+        channel: "journal-review-snapshot",
+        payload: { items: await journalReviewRepository.list() },
+      } satisfies ServerEvent),
+    );
     const current = getHistory()[0];
     if (current) socket.send(JSON.stringify({ channel: "morning", payload: current } satisfies ServerEvent));
+    const currentAnalysis = getJournalAnalysisHistory()[0];
+    if (currentAnalysis) {
+      socket.send(JSON.stringify({ channel: "journal-analysis", payload: currentAnalysis } satisfies ServerEvent));
+    }
   });
 }
 

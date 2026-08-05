@@ -2,9 +2,16 @@ import { Router } from "express";
 import { taskRepository } from "../vault/taskRepository.js";
 import { calendarCache } from "../reminders/calendarCache.js";
 import { buildVaultGraph, readVaultFile, resolveVaultId } from "../vault/graph.js";
+import { searchVault } from "../vault/search.js";
 import { listVaultMeetings, listVaultMeetingsFull } from "../vault/meetingsRepository.js";
 import { getHistory, startMorningRun, stopMorningRun } from "../automation/morningRun.js";
+import {
+  getJournalAnalysisHistory,
+  startJournalAnalysisRun,
+  stopJournalAnalysisRun,
+} from "../automation/journalAnalysisRun.js";
 import { reviewQueueRepository } from "../vault/reviewQueue.js";
+import { journalReviewRepository } from "../vault/journalReview.js";
 import { appendJournalEntry, listJournalEntries } from "../vault/journalRepository.js";
 import type { NewTaskInput } from "../types.js";
 
@@ -37,6 +44,16 @@ router.get("/meetings/full", async (_req, res) => {
 
 router.get("/graph", async (_req, res) => {
   res.json(await buildVaultGraph());
+});
+
+/** Local, offline fuzzy/typo-tolerant lexical search over the whole vault — no embeddings, no network calls. */
+router.get("/vault/search", async (req, res) => {
+  const q = typeof req.query.q === "string" ? req.query.q : "";
+  if (!q.trim()) {
+    res.status(400).json({ error: "q is required" });
+    return;
+  }
+  res.json(await searchVault(q));
 });
 
 router.get("/vault/resolve/:id", async (req, res) => {
@@ -149,6 +166,46 @@ router.post("/review-queue/:id/promote", async (req, res) => {
 router.post("/review-queue/:id/dismiss", async (req, res) => {
   try {
     await reviewQueueRepository.dismiss(req.params.id);
+    res.status(204).end();
+  } catch (err) {
+    res.status(404).json({ error: (err as Error).message });
+  }
+});
+
+router.get("/journal/analyze/history", (_req, res) => {
+  res.json(getJournalAnalysisHistory());
+});
+
+router.post("/journal/analyze/run", (req, res) => {
+  const { date } = req.body as { date?: string };
+  if (!date) {
+    res.status(400).json({ error: "date is required" });
+    return;
+  }
+  const run = startJournalAnalysisRun(date);
+  res.status(run.status === "running" ? 202 : 200).json(run);
+});
+
+router.post("/journal/analyze/stop", (_req, res) => {
+  res.json(stopJournalAnalysisRun());
+});
+
+router.get("/journal-review", async (_req, res) => {
+  res.json(await journalReviewRepository.list());
+});
+
+router.post("/journal-review/:id/confirm", async (req, res) => {
+  try {
+    await journalReviewRepository.confirm(req.params.id);
+    res.status(204).end();
+  } catch (err) {
+    res.status(404).json({ error: (err as Error).message });
+  }
+});
+
+router.post("/journal-review/:id/reject", async (req, res) => {
+  try {
+    await journalReviewRepository.reject(req.params.id);
     res.status(204).end();
   } catch (err) {
     res.status(404).json({ error: (err as Error).message });

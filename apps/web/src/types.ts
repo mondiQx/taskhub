@@ -49,6 +49,15 @@ export interface ReviewItem {
   sourceFile: string;
 }
 
+export interface JournalReviewItem {
+  id: string;
+  date: string;
+  description: string;
+  targetLabel: string;
+  payload: Record<string, unknown>;
+  sourceFile: string;
+}
+
 export interface Task {
   id: string;
   title: string;

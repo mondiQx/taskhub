@@ -133,4 +133,10 @@ function onDrop(e: DragEvent) {
   color: var(--color-ink);
   line-height: 1.25;
 }
+
+@media (max-width: 640px) {
+  .tile { border-radius: 18%; gap: 6%; padding: 10%; }
+  .label { font-size: 0.68rem; }
+  .badge, .new-badge { min-width: 1rem; height: 1rem; font-size: 0.58rem; }
+}
 </style>

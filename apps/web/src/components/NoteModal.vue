@@ -1,9 +1,35 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { marked } from "marked";
+import { useJournalReviewStore } from "../stores/journalReviewStore";
+import { useJournalAnalysisStore } from "../stores/journalAnalysisStore";
 
 const props = defineProps<{ folder: string; id: string }>();
 const emit = defineEmits<{ close: []; "open-task": [taskId: string]; "open-note": [folder: string, id: string] }>();
+
+const journalReview = useJournalReviewStore();
+const analysis = useJournalAnalysisStore();
+const showAnalysisLog = ref(false);
+
+const isJournal = computed(() => props.folder === "journal");
+const pendingItems = computed(() => journalReview.items.filter((i) => i.date === props.id));
+const run = computed(() => analysis.runFor(props.id));
+
+function kindLabel(payload: Record<string, unknown>): string {
+  return (
+    { "new-task": "New task", "task-update": "Update task", "meeting-recap": "Meeting recap", bug: "Bug" }[
+      payload.kind as string
+    ] ?? String(payload.kind ?? "")
+  );
+}
+
+function runAnalysis() {
+  showAnalysisLog.value = true;
+  analysis.run(props.id);
+}
+
+onMounted(() => journalReview.init());
+onMounted(() => analysis.init());
 
 const title = ref("");
 const body = ref("");
@@ -103,6 +129,40 @@ watch(
       <a v-else-if="url" :href="url" target="_blank" rel="noopener noreferrer" class="meeting-link">
         Open in Calendar ↗
       </a>
+      <div v-if="isJournal" class="journal-analysis">
+        <div class="analysis-bar">
+          <button class="analyze-btn" :disabled="run?.status === 'running'" @click="runAnalysis">
+            {{ run?.status === "running" ? "Analyzing…" : "Analyze this entry" }}
+          </button>
+          <button v-if="run" class="log-toggle" @click="showAnalysisLog = !showAnalysisLog">
+            {{ showAnalysisLog ? "Hide log" : "Show log" }}
+          </button>
+        </div>
+
+        <div v-if="showAnalysisLog && run" class="analysis-log">
+          <p v-for="(line, i) in run.log" :key="i">{{ line }}</p>
+          <p v-if="!run.log.length && run.status === 'running'" class="hint">Starting…</p>
+          <p v-if="run.error" class="analysis-error">{{ run.error }}</p>
+        </div>
+
+        <div v-if="pendingItems.length" class="review-section">
+          <h3 class="review-heading">Pending from journal analysis</h3>
+          <ul class="review-items">
+            <li v-for="item in pendingItems" :key="item.id" class="review-item">
+              <div class="review-body">
+                <span class="review-kind">{{ kindLabel(item.payload) }}</span>
+                <div class="review-desc">{{ item.description }}</div>
+                <div class="review-target">target: {{ item.targetLabel }}</div>
+              </div>
+              <div class="review-actions">
+                <button class="confirm" @click="journalReview.confirm(item.id)">Confirm</button>
+                <button class="reject" @click="journalReview.reject(item.id)">Reject</button>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+
       <p v-if="loading" class="hint">Loading…</p>
       <p v-else-if="error" class="hint">Couldn't load this note.</p>
       <div v-else class="markdown-body" v-html="html" @click="onBodyClick"></div>
@@ -159,6 +219,54 @@ h2 { margin: 0 0 var(--space-1); padding-right: var(--space-5); font-weight: 600
 }
 .meeting-link:hover { background: var(--color-accent); color: white; }
 .hint { font-size: 0.85rem; opacity: 0.6; }
+
+.journal-analysis { margin: 0 0 var(--space-4); }
+.analysis-bar { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); flex-wrap: wrap; }
+.analyze-btn {
+  background: var(--color-ink); color: white; border: none; border-radius: var(--radius-sm);
+  padding: 0.5rem 0.9rem; cursor: pointer; font: inherit; font-size: 0.85rem;
+}
+.analyze-btn:disabled { opacity: 0.6; cursor: default; }
+.log-toggle {
+  background: none; border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+  padding: 0.5rem 0.75rem; cursor: pointer; font: inherit; font-size: 0.8rem; color: var(--color-ink-soft);
+}
+.analysis-log {
+  background: rgba(var(--shadow-tint), 0.04); border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  padding: var(--space-3); margin-bottom: var(--space-3); font-size: 0.82rem; line-height: 1.5;
+  max-height: 220px; overflow-y: auto;
+}
+.analysis-log p { margin: 0 0 var(--space-2); white-space: pre-wrap; }
+.analysis-error { color: #b3402a; }
+
+.review-section { margin-bottom: var(--space-3); }
+.review-heading { font-size: 0.8rem; font-weight: 600; opacity: 0.75; margin: 0 0 var(--space-2); }
+.review-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.review-item {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3);
+  background: rgba(var(--shadow-tint), 0.04); border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  padding: var(--space-3);
+}
+.review-body { min-width: 0; }
+.review-kind {
+  display: inline-block; font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;
+  opacity: 0.6; margin-bottom: 0.2rem;
+}
+.review-desc { font-size: 0.88rem; }
+.review-target { font-size: 0.76rem; opacity: 0.65; margin-top: var(--space-1); }
+.review-actions { display: flex; flex-direction: column; gap: var(--space-2); flex-shrink: 0; }
+.review-actions button {
+  font: inherit; font-size: 0.82rem; padding: 0.3rem var(--space-3); border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border); cursor: pointer; white-space: nowrap;
+}
+.confirm { background: var(--color-accent); color: white; border-color: var(--color-accent); }
+.reject { background: none; color: var(--color-ink-soft); }
+
+@media (max-width: 560px) {
+  .review-item { flex-direction: column; }
+  .review-actions { flex-direction: row; width: 100%; }
+  .review-actions button { flex: 1; }
+}
 .markdown-body { font-size: clamp(0.95rem, 0.85rem + 0.2vw, 1.05rem); max-width: 68ch; }
 .markdown-body :deep(h1),
 .markdown-body :deep(h2),

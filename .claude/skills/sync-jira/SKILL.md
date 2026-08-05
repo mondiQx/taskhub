@@ -152,7 +152,7 @@ open; conversely a recently-updated issue can already be resolved.
   project key, and check whether each individual issue is old-and-dormant
   rather than treating the whole initiative or a whole project as stale.
 - **Recognition/rewards signal**: if an issue or its comments show one of
-  the user's direct reports (Joseph Cruz, Adonis Suico, Chris Dismaya,
+  the user's direct reports (Joseph Cruz, Adonis Suico, Cris Dismaya,
   Reggienel Patawaran) resolving something notable, getting called out by
   name in a comment, or otherwise being recognized — don't just skip it.
   Add a short note to that person's `vault/notes/<person>.md` (what
@@ -191,7 +191,7 @@ open; conversely a recently-updated issue can already be resolved.
 ## Step 4 — direct-report active-ticket roundup (live snapshot, not backfill)
 
 In addition to the user's own assigned issues, also check what's currently
-active for the user's direct reports (Joseph Cruz, Adonis Suico, Chris
+active for the user's direct reports (Joseph Cruz, Adonis Suico, Cris
 Dismaya, Reggienel Patawaran) — not to create tasks for their individual
 tickets (that's their work, not the user's), but to compile a per-person
 check-in list the user reviews at 1:1s.

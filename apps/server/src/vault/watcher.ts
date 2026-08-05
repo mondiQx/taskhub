@@ -2,6 +2,7 @@ import chokidar from "chokidar";
 import { tasksDir } from "./taskFile.js";
 import { taskRepository } from "./taskRepository.js";
 import { inboxDir, reviewQueueRepository } from "./reviewQueue.js";
+import { journalReviewRepository } from "./journalReview.js";
 
 /**
  * Watches vault/tasks/*.md for changes made outside this process — a hand
@@ -20,17 +21,21 @@ export function startVaultWatcher(): void {
 
   const isTaskFile = (filePath: string) => filePath.endsWith(".md") && !filePath.startsWith(inboxDir);
   const isInboxFile = (filePath: string) => filePath.endsWith(".md") && filePath.startsWith(inboxDir);
+  const isJournalReviewFile = (filePath: string) => /journal-review-.*\.md$/.test(filePath);
 
   watcher.on("add", (filePath) => {
     if (isTaskFile(filePath)) taskRepository.reconcileFile(filePath);
+    else if (isJournalReviewFile(filePath)) journalReviewRepository.reconcile();
     else if (isInboxFile(filePath)) reviewQueueRepository.reconcile();
   });
   watcher.on("change", (filePath) => {
     if (isTaskFile(filePath)) taskRepository.reconcileFile(filePath);
+    else if (isJournalReviewFile(filePath)) journalReviewRepository.reconcile();
     else if (isInboxFile(filePath)) reviewQueueRepository.reconcile();
   });
   watcher.on("unlink", (filePath) => {
     if (isTaskFile(filePath)) taskRepository.removeFile(filePath);
+    else if (isJournalReviewFile(filePath)) journalReviewRepository.reconcile();
     else if (isInboxFile(filePath)) reviewQueueRepository.reconcile();
   });
   watcher.on("error", (err) => console.error("[watcher] error:", err));

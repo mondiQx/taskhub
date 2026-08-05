@@ -192,12 +192,12 @@ function datedEventId(recurringEventId: string, iso: string): string {
 // `lookaheadDays` — otherwise a discontinued series would show up as
 // perpetually "upcoming".
 export function computeUpcomingItems(meetings: Meeting[], lookaheadDays: number): UpcomingItem[] {
-  const nowIso = new Date().toISOString();
+  const now = Date.now();
   const items: UpcomingItem[] = [];
 
   for (const m of meetings) {
     if (m.recurringEventId) continue; // recurring handled via projection below
-    if (m.start < nowIso) continue;
+    if (new Date(m.start).getTime() < now) continue;
     items.push({
       id: m.id,
       key: m.id,

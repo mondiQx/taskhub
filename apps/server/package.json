@@ -10,15 +10,16 @@
     "calendar:range": "tsx src/scripts/fetch-events-range.ts"
   },
   "dependencies": {
+    "@slack/web-api": "^7.8.0",
     "chokidar": "^4.0.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.1",
-    "gray-matter": "^4.0.3",
-    "nanoid": "^5.0.9",
-    "ws": "^8.18.0",
     "googleapis": "^144.0.0",
-    "@slack/web-api": "^7.8.0"
+    "gray-matter": "^4.0.3",
+    "minisearch": "^7.2.0",
+    "nanoid": "^5.0.9",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

@@ -12,6 +12,20 @@ const loading = ref(true);
 const expandedSeries = ref(new Set<string>());
 const collapsedMonths = ref(new Set<string>());
 
+// On mobile the Upcoming/Recurring/History columns start collapsed to avoid
+// a wall of scrolling; on desktop they're always expanded regardless of this set.
+const isMobile = window.matchMedia("(max-width: 640px)").matches;
+const collapsedColumns = ref(new Set<string>(isMobile ? ["upcoming", "recurring", "history"] : []));
+function toggleColumn(key: string) {
+  if (!isMobile) return;
+  if (collapsedColumns.value.has(key)) collapsedColumns.value.delete(key);
+  else collapsedColumns.value.add(key);
+  collapsedColumns.value = new Set(collapsedColumns.value);
+}
+function columnOpen(key: string): boolean {
+  return !isMobile || !collapsedColumns.value.has(key);
+}
+
 onMounted(async () => {
   await meetingsStore.init();
   loading.value = false;
@@ -47,13 +61,13 @@ const upcomingMeetings = computed(() => meetingsStore.upcomingItems(UPCOMING_LOO
 // One-offs only — recurring series live in recurringSeries above. Split on
 // "now" so future meetings surface in the Upcoming column instead of being
 // buried at the top of the history column.
-const nowIso = new Date().toISOString();
+const now = Date.now();
 
 const monthGroups = computed<MonthGroup[]>(() => {
   const byMonth = new Map<string, Meeting[]>();
   for (const m of meetings.value) {
     if (m.recurringEventId) continue;
-    if (m.start >= nowIso) continue; // upcoming — shown in its own column instead
+    if (new Date(m.start).getTime() >= now) continue; // upcoming — shown in its own column instead
     const key = monthKey(m.start);
     const list = byMonth.get(key) ?? [];
     list.push(m);
@@ -106,7 +120,11 @@ function linkedTaskByEventId(eventId?: string): Task | undefined {
 
       <div v-else class="columns">
         <section class="column">
-          <h2>Upcoming</h2>
+          <button class="column-header" type="button" @click="toggleColumn('upcoming')">
+            <h2>Upcoming</h2>
+            <span class="chevron column-chevron" :class="{ collapsed: !columnOpen('upcoming') }">▾</span>
+          </button>
+          <template v-if="columnOpen('upcoming')">
           <p v-if="!upcomingMeetings.length" class="empty column-empty">Nothing on the calendar yet.</p>
           <ul v-else class="series-list">
             <li v-for="m in upcomingMeetings" :key="m.key" class="series">
@@ -128,10 +146,15 @@ function linkedTaskByEventId(eventId?: string): Task | undefined {
               </div>
             </li>
           </ul>
+          </template>
         </section>
 
         <section class="column">
-          <h2>Recurring</h2>
+          <button class="column-header" type="button" @click="toggleColumn('recurring')">
+            <h2>Recurring</h2>
+            <span class="chevron column-chevron" :class="{ collapsed: !columnOpen('recurring') }">▾</span>
+          </button>
+          <template v-if="columnOpen('recurring')">
           <p v-if="!recurringSeries.length" class="empty column-empty">No recurring series cached.</p>
           <ul v-else class="series-list">
             <li v-for="sg in recurringSeries" :key="sg.key" class="series">
@@ -162,10 +185,15 @@ function linkedTaskByEventId(eventId?: string): Task | undefined {
               </ul>
             </li>
           </ul>
+          </template>
         </section>
 
         <section class="column">
-          <h2>History</h2>
+          <button class="column-header" type="button" @click="toggleColumn('history')">
+            <h2>History</h2>
+            <span class="chevron column-chevron" :class="{ collapsed: !columnOpen('history') }">▾</span>
+          </button>
+          <template v-if="columnOpen('history')">
           <p v-if="!monthGroups.length" class="empty column-empty">No past meetings cached.</p>
           <template v-else>
             <section v-for="month in monthGroups" :key="month.key" class="month">
@@ -190,6 +218,7 @@ function linkedTaskByEventId(eventId?: string): Task | undefined {
               </ul>
             </section>
           </template>
+          </template>
         </section>
       </div>
     </template>
@@ -207,9 +236,21 @@ function linkedTaskByEventId(eventId?: string): Task | undefined {
   border-bottom: 1px solid var(--color-border); padding-bottom: var(--space-2);
 }
 .column-empty { margin-top: 0; text-align: left; font-size: 0.85rem; }
+.column-header {
+  display: flex; align-items: center; justify-content: space-between; width: 100%;
+  background: none; border: none; padding: 0; margin: 0 0 var(--space-3); cursor: default;
+  border-bottom: 1px solid var(--color-border); padding-bottom: var(--space-2); font: inherit; text-align: left;
+}
+.column-header h2 { margin: 0; border: none; padding: 0; }
+.column-chevron { display: none; }
 
 @media (max-width: 960px) {
   .columns { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 640px) {
+  .column-header { cursor: pointer; }
+  .column-chevron { display: inline-block; font-size: 0.8rem; }
 }
 
 .month { margin-bottom: var(--space-5); }

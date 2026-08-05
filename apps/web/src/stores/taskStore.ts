@@ -2,6 +2,8 @@ import { defineStore } from "pinia";
 import type { Task } from "../types";
 import { useAutomationStore } from "./automationStore";
 import { useReviewQueueStore } from "./reviewQueueStore";
+import { useJournalReviewStore } from "./journalReviewStore";
+import { useJournalAnalysisStore } from "./journalAnalysisStore";
 import { startMeetingAlarm, stopMeetingAlarm } from "../utils/chime";
 
 interface MeetingAlert {
@@ -78,6 +80,18 @@ export const useTaskStore = defineStore("tasks", {
       }
       if (msg.channel === "review") {
         useReviewQueueStore().applyChange(msg.payload);
+        return;
+      }
+      if (msg.channel === "journal-review-snapshot") {
+        useJournalReviewStore().applySnapshot(msg.payload.items);
+        return;
+      }
+      if (msg.channel === "journal-review") {
+        useJournalReviewStore().applyChange(msg.payload);
+        return;
+      }
+      if (msg.channel === "journal-analysis") {
+        useJournalAnalysisStore().applyRun(msg.payload);
       }
     },
 

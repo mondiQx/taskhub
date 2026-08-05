@@ -156,7 +156,7 @@ say so plainly and stop — don't fabricate calendar data.
      email: take the local part before `@` and compare it against the
      known person notes (most person notes use a first-name or
      `f.lastname` local part — e.g. `elmer@qstrike.com` →
-     `[[elmer-alvarado]]`, `c.dismaya@qstrike.com` → `[[chris-dismaya]]`).
+     `[[elmer-alvarado]]`, `c.dismaya@qstrike.com` → `[[cris-dismaya]]`).
      Build this mapping from what's actually in `vault/notes/` at run
      time (list `type: person` notes, don't hardcode a fixed roster) —
      new people get notes over time. Skip attendees with no matching
@@ -219,7 +219,7 @@ deciding something's stale.
 ## Step 3b — direct-report calendar signal (Raymond's calendar only)
 
 This skill only ever reads Raymond's own calendar — never pull a direct
-report's calendar directly. Signal about Joseph Cruz, Adonis Suico, Chris
+report's calendar directly. Signal about Joseph Cruz, Adonis Suico, Cris
 Dismaya, or Reggienel Patawaran comes only from events on *Raymond's*
 calendar that they're also on (declines, no-shows, recurring 1:1s, etc.).
 

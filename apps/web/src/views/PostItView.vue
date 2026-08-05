@@ -149,6 +149,7 @@ function closeAddModal() {
       </div>
     </div>
     <p v-if="voice.interimTranscript" class="interim">{{ voice.interimTranscript }}</p>
+    <p v-if="voice.error" class="voice-error">{{ voice.error }}</p>
 
     <div v-if="searching" class="board">
       <PostItNote
@@ -225,6 +226,7 @@ function closeAddModal() {
 .mic.recording { background: #e5484d; color: white; border-color: #e5484d; }
 .add-btn { background: #2f2a24; color: white; border: none; border-radius: 6px; padding: 0.5rem 0.9rem; cursor: pointer; white-space: nowrap; }
 .interim { font-size: 0.8rem; opacity: 0.6; margin: 0.25rem 0 0.75rem; }
+.voice-error { font-size: 0.8rem; color: #b3261e; margin: 0.25rem 0 0.75rem; }
 .board {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -232,4 +234,12 @@ function closeAddModal() {
   gap: 1rem;
 }
 .empty { opacity: 0.6; font-size: 0.9rem; }
+
+@media (max-width: 640px) {
+  .postits { padding: 0.6rem; }
+  .board {
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    gap: 0.6rem;
+  }
+}
 </style>
