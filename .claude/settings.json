@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "ask": [
+      "Bash(git push*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git push*)",
+            "command": "branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null); if [ \"$branch\" = \"main\" ] || [ \"$branch\" = \"master\" ]; then echo \"{\\\"hookSpecificOutput\\\":{\\\"hookEventName\\\":\\\"PreToolUse\\\",\\\"permissionDecision\\\":\\\"deny\\\",\\\"permissionDecisionReason\\\":\\\"Direct push to $branch is blocked by project guardrail. Create a feature branch, commit there, and open a PR (gh pr create) instead. If you truly need to push main directly, tell the user why and let them run it themselves.\\\"}}\"; fi"
+          }
+        ]
+      }
+    ]
+  }
+}
