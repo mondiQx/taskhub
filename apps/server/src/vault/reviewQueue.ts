@@ -3,12 +3,15 @@ import path from "node:path";
 import { EventEmitter } from "node:events";
 import { config } from "../config.js";
 import { taskRepository } from "./taskRepository.js";
+import { appendUnderHeadingInFile } from "./noteAppend.js";
 
 export const inboxDir = path.join(config.vaultPath, "tasks", "_inbox");
 const decisionsLogFile = path.join(inboxDir, "gmail-decisions-log.md");
+const notesDecisionsLogFile = path.join(inboxDir, "notes-decisions-log.md");
 const syncStateFile = path.join(config.dataPath, "sync-state.json");
 
-export interface ReviewItem {
+export interface GmailReviewItem {
+  kind: "gmail";
   id: string;
   subject: string;
   reason: string;
@@ -17,12 +20,26 @@ export interface ReviewItem {
   sourceFile: string;
 }
 
+export interface NoteExcerptReviewItem {
+  kind: "note-excerpt";
+  id: string;
+  subject: string; // the completed task's title
+  reason: string; // the proposed excerpt text
+  targetNoteId: string | null; // null when no match was found
+  taskId: string;
+  sourceFile: string;
+}
+
+export type ReviewItem = GmailReviewItem | NoteExcerptReviewItem;
+
 export type ReviewChangeEvent = { type: "removed" | "reset"; id?: string; items?: ReviewItem[] };
 
-const LINE_RE = /^- \[([ x])\] (.+?) — (.+?) — thread:(\S+), from:(\S+)\s*$/;
+const GMAIL_LINE_RE = /^- \[([ x])\] (.+?) — (.+?) — thread:(\S+), from:(\S+)\s*$/;
+// `- [ ] <task title> → [[<note-id>]] — <excerpt> — task:<task id>` (or `→ (no match — needs a destination)`)
+const NOTE_LINE_RE = /^- \[([ x])\] (.+?) → (\[\[([^\]]+)\]\]|\(no match — needs a destination\)) — (.+?) — task:(\S+)\s*$/;
 
-function itemId(sourceFile: string, threadId: string): string {
-  return `${path.basename(sourceFile)}::${threadId}`;
+function itemId(prefix: string, sourceFile: string, key: string): string {
+  return `${prefix}:${path.basename(sourceFile)}::${key}`;
 }
 
 class ReviewQueueRepository extends EventEmitter {
@@ -35,15 +52,34 @@ class ReviewQueueRepository extends EventEmitter {
       return items;
     }
     for (const entry of entries) {
-      if (!/^gmail-review-.*\.md$/.test(entry)) continue;
-      const sourceFile = path.join(inboxDir, entry);
-      const raw = await fs.readFile(sourceFile, "utf8");
-      for (const line of raw.split("\n")) {
-        const match = LINE_RE.exec(line.trim());
-        if (!match) continue;
-        const [, checked, subject, reason, threadId, from] = match;
-        if (checked === "x") continue; // already queued for promotion by the skill; hide from the live list
-        items.push({ id: itemId(sourceFile, threadId), subject, reason, threadId, from, sourceFile });
+      if (/^gmail-review-.*\.md$/.test(entry)) {
+        const sourceFile = path.join(inboxDir, entry);
+        const raw = await fs.readFile(sourceFile, "utf8");
+        for (const line of raw.split("\n")) {
+          const match = GMAIL_LINE_RE.exec(line.trim());
+          if (!match) continue;
+          const [, checked, subject, reason, threadId, from] = match;
+          if (checked === "x") continue; // already queued for promotion by the skill; hide from the live list
+          items.push({ kind: "gmail", id: itemId("gmail", sourceFile, threadId), subject, reason, threadId, from, sourceFile });
+        }
+      } else if (/^notes-review-.*\.md$/.test(entry)) {
+        const sourceFile = path.join(inboxDir, entry);
+        const raw = await fs.readFile(sourceFile, "utf8");
+        for (const line of raw.split("\n")) {
+          const match = NOTE_LINE_RE.exec(line.trim());
+          if (!match) continue;
+          const [, checked, subject, , , targetNoteId, reason, taskId] = match;
+          if (checked === "x") continue;
+          items.push({
+            kind: "note-excerpt",
+            id: itemId("note", sourceFile, taskId),
+            subject,
+            reason,
+            targetNoteId: targetNoteId ?? null,
+            taskId,
+            sourceFile,
+          });
+        }
       }
     }
     return items;
@@ -68,8 +104,23 @@ class ReviewQueueRepository extends EventEmitter {
     await fs.writeFile(syncStateFile, JSON.stringify(state, null, 2), "utf8");
   }
 
+  /** Records that this task's excerpt has been handled (applied or declined) so /close-task-notes never re-queues it. */
+  private async recordNoteRoutingInState(taskId: string): Promise<void> {
+    let state: any = {};
+    try {
+      state = JSON.parse(await fs.readFile(syncStateFile, "utf8"));
+    } catch {
+      // missing/corrupt state file — start fresh rather than blocking the decision
+    }
+    state.noteRouting ??= { routed: {} };
+    state.noteRouting.routed ??= {};
+    state.noteRouting.routed[taskId] = new Date().toISOString();
+    await fs.mkdir(config.dataPath, { recursive: true });
+    await fs.writeFile(syncStateFile, JSON.stringify(state, null, 2), "utf8");
+  }
+
   /** Appends a permanent, human-readable record of the decision — this is what "going back to it" shows. */
-  private async appendDecisionLog(item: ReviewItem, decision: "accepted" | "declined", note?: string): Promise<void> {
+  private async appendDecisionLog(item: GmailReviewItem, decision: "accepted" | "declined", note?: string): Promise<void> {
     const at = new Date().toISOString();
     const checkbox = decision === "accepted" ? "[x]" : "[ ]";
     const suffix = note ? `, ${note}` : "";
@@ -87,13 +138,34 @@ class ReviewQueueRepository extends EventEmitter {
     await fs.writeFile(decisionsLogFile, existing + line, "utf8");
   }
 
+  private async appendNoteDecisionLog(item: NoteExcerptReviewItem, decision: "accepted" | "declined"): Promise<void> {
+    const at = new Date().toISOString();
+    const checkbox = decision === "accepted" ? "[x]" : "[ ]";
+    const target = item.targetNoteId ? `[[${item.targetNoteId}]]` : "(no target)";
+    const line = `- ${checkbox} ${item.subject} → ${target} — ${decision} — task:${item.taskId} — ${at}\n`;
+    let existing = "";
+    try {
+      existing = await fs.readFile(notesDecisionsLogFile, "utf8");
+    } catch {
+      existing =
+        "# Notes review decisions log\n\n" +
+        "Permanent record of every accept/reject decision made on a completed-task note " +
+        "excerpt in the Review Queue view (or by hand-editing/deleting a line in a " +
+        "`notes-review-*.md` file). Never re-parsed as pending — history only.\n\n";
+    }
+    await fs.writeFile(notesDecisionsLogFile, existing + line, "utf8");
+  }
+
   private async removeLine(item: ReviewItem): Promise<void> {
+    const lineRe = item.kind === "gmail" ? GMAIL_LINE_RE : NOTE_LINE_RE;
+    const idKey = item.kind === "gmail" ? item.threadId : item.taskId;
+    const idGroupIndex = item.kind === "gmail" ? 4 : 6;
     const raw = await fs.readFile(item.sourceFile, "utf8");
     const lines = raw.split("\n").filter((line) => {
-      const match = LINE_RE.exec(line.trim());
-      return !(match && match[4] === item.threadId);
+      const match = lineRe.exec(line.trim());
+      return !(match && match[idGroupIndex] === idKey);
     });
-    const remainingItems = lines.some((line) => LINE_RE.test(line.trim()));
+    const remainingItems = lines.some((line) => lineRe.test(line.trim()));
     if (remainingItems) {
       await fs.writeFile(item.sourceFile, lines.join("\n"), "utf8");
     } else {
@@ -106,27 +178,46 @@ class ReviewQueueRepository extends EventEmitter {
   async promote(id: string): Promise<void> {
     const item = await this.findItem(id);
     if (!item) throw new Error(`Review item ${id} not found`);
-    const created = await taskRepository.create({
-      title: item.subject,
-      body: `${item.reason}\n\nFrom: ${item.from}`,
-      priority: "medium",
-      source: {
-        type: "gmail",
-        externalId: `thread:${item.threadId}`,
-        url: `https://mail.google.com/mail/u/0/#inbox/${item.threadId}`,
-      },
-    });
+    if (item.kind === "gmail") {
+      const created = await taskRepository.create({
+        title: item.subject,
+        body: `${item.reason}\n\nFrom: ${item.from}`,
+        priority: "medium",
+        source: {
+          type: "gmail",
+          externalId: `thread:${item.threadId}`,
+          url: `https://mail.google.com/mail/u/0/#inbox/${item.threadId}`,
+        },
+      });
+      await this.removeLine(item);
+      await this.recordDecisionInState(item.threadId, "create");
+      await this.appendDecisionLog(item, "accepted", `created task ${created?.id ?? ""}`.trim());
+      return;
+    }
+
+    if (!item.targetNoteId) {
+      throw new Error("This item has no matched note — dismiss it and route the excerpt manually.");
+    }
+    const notePath = path.join(config.vaultPath, "notes", `${item.targetNoteId}.md`);
+    const today = new Date().toISOString().slice(0, 10);
+    await appendUnderHeadingInFile(notePath, "Updates", `- ${today}: ${item.reason}`);
     await this.removeLine(item);
-    await this.recordDecisionInState(item.threadId, "create");
-    await this.appendDecisionLog(item, "accepted", `created task ${created?.id ?? ""}`.trim());
+    await this.recordNoteRoutingInState(item.taskId);
+    await this.appendNoteDecisionLog(item, "accepted");
   }
 
   async dismiss(id: string): Promise<void> {
     const item = await this.findItem(id);
     if (!item) throw new Error(`Review item ${id} not found`);
+    if (item.kind === "gmail") {
+      await this.removeLine(item);
+      await this.recordDecisionInState(item.threadId, "declined");
+      await this.appendDecisionLog(item, "declined");
+      return;
+    }
     await this.removeLine(item);
-    await this.recordDecisionInState(item.threadId, "declined");
-    await this.appendDecisionLog(item, "declined");
+    await this.recordNoteRoutingInState(item.taskId);
+    await this.appendNoteDecisionLog(item, "declined");
   }
 
   /** Called by the vault file watcher when an _inbox file changes outside this process (e.g. /sync-gmail writing new items). */

@@ -156,6 +156,21 @@ connections. Run them individually via `/sync-gmail`, `/sync-jira`,
   when the laptop is on and logged in. Not installed by default; see the
   plist comments for what it does before loading it with `launchctl`.
 
+## Git workflow
+
+- Never push directly to `main`. `.claude/settings.json` enforces this with
+  a `PreToolUse` hook that hard-blocks any `git push` while on `main`/
+  `master` — work on a feature branch and open a PR (`gh pr create`)
+  instead. The same settings file also forces an explicit confirmation
+  prompt before *any* `git push`, even on a branch, even if the user only
+  asked to "commit and push" in one breath — commit and push are separate
+  approvals.
+- Before pushing anything (branch or, if ever explicitly overridden, main),
+  run the `code-review` skill on the diff and show the user the findings
+  first. Don't push straight after a fix without that pass — the guardrail
+  hook doesn't check code quality, only branch safety, so this step still
+  requires deliberately doing it.
+
 ## Do not
 
 - Do not add a SQL/NoSQL database — the vault is the store.

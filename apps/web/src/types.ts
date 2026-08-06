@@ -40,7 +40,8 @@ export interface JournalEntrySummary {
   preview: string;
 }
 
-export interface ReviewItem {
+export interface GmailReviewItem {
+  kind: "gmail";
   id: string;
   subject: string;
   reason: string;
@@ -48,6 +49,18 @@ export interface ReviewItem {
   from: string;
   sourceFile: string;
 }
+
+export interface NoteExcerptReviewItem {
+  kind: "note-excerpt";
+  id: string;
+  subject: string;
+  reason: string;
+  targetNoteId: string | null;
+  taskId: string;
+  sourceFile: string;
+}
+
+export type ReviewItem = GmailReviewItem | NoteExcerptReviewItem;
 
 export interface JournalReviewItem {
   id: string;
