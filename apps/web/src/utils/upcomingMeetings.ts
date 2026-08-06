@@ -56,10 +56,10 @@ export function computeRecurringSeries(meetings: Meeting[]): SeriesGroup[] {
 
   return Array.from(bySeries.entries())
     .map(([key, occurrences]) => {
-      const sorted = [...occurrences].sort((a, b) => b.start.localeCompare(a.start));
+      const sorted = [...occurrences].sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime());
       return { key, latest: sorted[0], occurrences: sorted };
     })
-    .sort((a, b) => b.latest.start.localeCompare(a.latest.start));
+    .sort((a, b) => new Date(b.latest.start).getTime() - new Date(a.latest.start).getTime());
 }
 
 const WEEKDAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
@@ -234,5 +234,10 @@ export function computeUpcomingItems(meetings: Meeting[], lookaheadDays: number)
     }
   }
 
-  return items.sort((a, b) => a.start.localeCompare(b.start));
+  // Numeric comparison, not string: cached one-off meetings keep their
+  // original "+08:00" offset while projected recurring occurrences come out
+  // of stepToFuture()'s toISOString() as UTC "Z" — comparing those two
+  // formats lexicographically scrambles same-day ordering (e.g. a 10am
+  // "+08:00" meeting sorting before an 8am one projected as "Z").
+  return items.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
 }

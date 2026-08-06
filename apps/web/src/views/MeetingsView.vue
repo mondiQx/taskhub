@@ -78,7 +78,7 @@ const monthGroups = computed<MonthGroup[]>(() => {
     .map(([key, ms]) => ({
       key,
       label: monthLabel(key),
-      meetings: ms.sort((a, b) => b.start.localeCompare(a.start)),
+      meetings: ms.sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime()),
     }))
     .sort((a, b) => b.key.localeCompare(a.key));
 });
