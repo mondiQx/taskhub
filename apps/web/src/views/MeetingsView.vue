@@ -95,12 +95,12 @@ function toggleMonth(key: string) {
   collapsedMonths.value = new Set(collapsedMonths.value);
 }
 
-function linkedTask(meeting: Meeting): Task | undefined {
-  return linkedTaskByEventId(meeting.eventId);
+function linkedTasks(meeting: Meeting): Task[] {
+  return linkedTasksByEventId(meeting.eventId);
 }
 
-function linkedTaskByEventId(eventId?: string): Task | undefined {
-  return taskStore.tasks.find(
+function linkedTasksByEventId(eventId?: string): Task[] {
+  return taskStore.tasks.filter(
     (t) =>
       t.relatedMeeting &&
       eventId &&
@@ -137,12 +137,13 @@ function linkedTaskByEventId(eventId?: string): Task | undefined {
               </div>
 
               <div
-                v-if="linkedTaskByEventId(m.eventId)"
+                v-for="task in linkedTasksByEventId(m.eventId)"
+                :key="task.id"
                 class="task-badge"
-                @click="emit('open', linkedTaskByEventId(m.eventId)!.id)"
+                @click="emit('open', task.id)"
               >
-                <span class="status-dot" :class="linkedTaskByEventId(m.eventId)!.status"></span>
-                {{ linkedTaskByEventId(m.eventId)!.title }}
+                <span class="status-dot" :class="task.status"></span>
+                {{ task.title }}
               </div>
             </li>
           </ul>
@@ -167,9 +168,14 @@ function linkedTaskByEventId(eventId?: string): Task | undefined {
                 </span>
               </div>
 
-              <div v-if="linkedTask(sg.latest)" class="task-badge" @click="emit('open', linkedTask(sg.latest)!.id)">
-                <span class="status-dot" :class="linkedTask(sg.latest)!.status"></span>
-                {{ linkedTask(sg.latest)!.title }}
+              <div
+                v-for="task in linkedTasks(sg.latest)"
+                :key="task.id"
+                class="task-badge"
+                @click="emit('open', task.id)"
+              >
+                <span class="status-dot" :class="task.status"></span>
+                {{ task.title }}
               </div>
 
               <ul v-if="expandedSeries.has(sg.key)" class="occurrences">
@@ -210,9 +216,14 @@ function linkedTaskByEventId(eventId?: string): Task | undefined {
                     <span class="title" @click="emit('open-meeting', m.id)">{{ m.title }}</span>
                   </div>
 
-                  <div v-if="linkedTask(m)" class="task-badge" @click="emit('open', linkedTask(m)!.id)">
-                    <span class="status-dot" :class="linkedTask(m)!.status"></span>
-                    {{ linkedTask(m)!.title }}
+                  <div
+                    v-for="task in linkedTasks(m)"
+                    :key="task.id"
+                    class="task-badge"
+                    @click="emit('open', task.id)"
+                  >
+                    <span class="status-dot" :class="task.status"></span>
+                    {{ task.title }}
                   </div>
                 </li>
               </ul>

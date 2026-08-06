@@ -1,10 +1,18 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, markRaw, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useTaskStore } from "../stores/taskStore";
 
 const emit = defineEmits<{ open: [id: string]; "open-note": [folder: string, id: string] }>();
 
 const taskStore = useTaskStore();
+
+watch(
+  () => taskStore.showDone,
+  () => {
+    filterCacheKey = "";
+    draw();
+  },
+);
 
 interface GraphNode {
   id: string;
@@ -61,6 +69,41 @@ let adjacency = new Map<string, Set<string>>();
 // surviving focused nodes expand to fill the canvas instead of leaving the
 // gaps where hidden nodes used to be. Identity (scale 1, centered) otherwise.
 let camera = { scale: 1, cx: 0, cy: 0 };
+let simRunning = false;
+let settledFrames = 0;
+const SETTLE_ENERGY_THRESHOLD = 0.05;
+const SETTLE_FRAMES_NEEDED = 20;
+
+let filterCacheKey = "";
+let cachedVisible = new Set<string>();
+let cachedById = new Map<string, GraphNode>();
+let cachedDegree = new Map<string, number>();
+
+function getFilteredCaches() {
+  const key = `${[...activeFolders.value].sort().join(",")}|${taskStore.showDone}|${nodes.value.length}|${edges.value.length}`;
+  if (key === filterCacheKey) return { visible: cachedVisible, byId: cachedById, degree: cachedDegree };
+  filterCacheKey = key;
+  cachedById = new Map(nodes.value.map((n) => [n.id, n]));
+  cachedVisible = new Set(
+    nodes.value
+      .filter((n) => activeFolders.value.has(n.folder) && (taskStore.showDone || n.status !== "done"))
+      .map((n) => n.id),
+  );
+  cachedDegree = new Map<string, number>();
+  for (const e of edges.value) {
+    cachedDegree.set(e.source, (cachedDegree.get(e.source) ?? 0) + 1);
+    cachedDegree.set(e.target, (cachedDegree.get(e.target) ?? 0) + 1);
+  }
+  return { visible: cachedVisible, byId: cachedById, degree: cachedDegree };
+}
+
+function wakeSimulation() {
+  settledFrames = 0;
+  if (!simRunning) {
+    simRunning = true;
+    raf = requestAnimationFrame(step);
+  }
+}
 
 function neighborhoodOf(ids: string[]): Set<string> {
   const set = new Set<string>();
@@ -88,6 +131,7 @@ function resize() {
   if (!canvas) return;
   canvas.width = canvas.clientWidth;
   canvas.height = canvas.clientHeight;
+  wakeSimulation();
 }
 
 function step() {
@@ -141,6 +185,7 @@ function step() {
   // gentle pull to center + damping + integrate
   const margin = 24;
   const maxSpeed = 8;
+  let energy = 0;
   for (const n of nodes.value) {
     if (n === dragging) continue;
     n.vx += (cx - n.x) * 0.001;
@@ -164,9 +209,19 @@ function step() {
     else if (n.x > w - margin) { n.x = w - margin; n.vx = -Math.abs(n.vx) * 0.4; }
     if (n.y < margin) { n.y = margin; n.vy = Math.abs(n.vy) * 0.4; }
     else if (n.y > h - margin) { n.y = h - margin; n.vy = -Math.abs(n.vy) * 0.4; }
+
+    energy += n.vx * n.vx + n.vy * n.vy;
   }
 
   draw();
+
+  if (energy < SETTLE_ENERGY_THRESHOLD) settledFrames++;
+  else settledFrames = 0;
+
+  if (settledFrames >= SETTLE_FRAMES_NEEDED) {
+    simRunning = false;
+    return;
+  }
   raf = requestAnimationFrame(step);
 }
 
@@ -175,12 +230,7 @@ function draw() {
   if (!canvas || !ctx) return;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  const visible = new Set(
-    nodes.value
-      .filter((n) => activeFolders.value.has(n.folder) && (taskStore.showDone || n.status !== "done"))
-      .map((n) => n.id),
-  );
-  const byId = new Map(nodes.value.map((n) => [n.id, n]));
+  const { visible, byId, degree } = getFilteredCaches();
 
   const focus = focusIds.value;
   const DIM_ALPHA = 0.15;
@@ -225,12 +275,6 @@ function draw() {
     ctx.stroke();
   }
   ctx.globalAlpha = 1;
-
-  const degree = new Map<string, number>();
-  for (const e of edges.value) {
-    degree.set(e.source, (degree.get(e.source) ?? 0) + 1);
-    degree.set(e.target, (degree.get(e.target) ?? 0) + 1);
-  }
 
   for (const n of nodes.value) {
     if (!visible.has(n.id)) continue;
@@ -319,6 +363,7 @@ function onMouseDown(evt: MouseEvent) {
   if (dragging) {
     focusIds.value = neighborhoodOf([dragging.id]);
     hideNonFocused.value = false;
+    wakeSimulation();
   }
 }
 
@@ -335,6 +380,7 @@ function onMouseMove(evt: MouseEvent) {
     dragging.y = y;
     dragging.vx = 0;
     dragging.vy = 0;
+    wakeSimulation();
     return;
   }
   hovered.value = nodeAt(x, y);
@@ -373,6 +419,8 @@ const matchCount = computed(() => {
 function toggleFolder(folder: string) {
   if (activeFolders.value.has(folder)) activeFolders.value.delete(folder);
   else activeFolders.value.add(folder);
+  filterCacheKey = "";
+  draw();
 }
 
 // Golden-angle spiral — spreads nodes out from the center with no overlap and no
@@ -387,13 +435,13 @@ async function load() {
   nodes.value = data.nodes.map((n, i) => {
     const r = 8 * Math.sqrt(i + 1);
     const theta = i * GOLDEN_ANGLE;
-    return {
+    return markRaw({
       ...n,
       x: canvas.width / 2 + r * Math.cos(theta),
       y: canvas.height / 2 + r * Math.sin(theta),
       vx: 0,
       vy: 0,
-    };
+    });
   });
   edges.value = data.edges;
 
@@ -404,6 +452,8 @@ async function load() {
     adjacency.get(e.source)!.add(e.target);
     adjacency.get(e.target)!.add(e.source);
   }
+  filterCacheKey = "";
+  wakeSimulation();
 }
 
 onMounted(async () => {
@@ -411,7 +461,6 @@ onMounted(async () => {
   resize();
   window.addEventListener("resize", resize);
   await load();
-  step();
 });
 
 onBeforeUnmount(() => {

@@ -68,7 +68,7 @@ class ReviewQueueRepository extends EventEmitter {
         for (const line of raw.split("\n")) {
           const match = NOTE_LINE_RE.exec(line.trim());
           if (!match) continue;
-          const [, checked, subject, , , targetNoteId, reason, taskId] = match;
+          const [, checked, subject, , targetNoteId, reason, taskId] = match;
           if (checked === "x") continue;
           items.push({
             kind: "note-excerpt",
