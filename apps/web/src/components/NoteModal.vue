@@ -41,6 +41,9 @@ const url = ref<string | undefined>(undefined);
 const meetLink = ref<string | undefined>(undefined);
 const loading = ref(true);
 const error = ref(false);
+const editing = ref(false);
+const editBody = ref("");
+const saving = ref(false);
 
 const hasTimeOfDay = (iso: string) => /T\d{2}:\d{2}/.test(iso);
 
@@ -87,11 +90,36 @@ async function onBodyClick(evt: MouseEvent) {
   else emit("open-note", resolved.folder, targetId);
 }
 
+function startEdit() {
+  editBody.value = body.value;
+  editing.value = true;
+}
+
+function cancelEdit() {
+  editing.value = false;
+}
+
+async function saveEdit() {
+  saving.value = true;
+  try {
+    await fetch(`/api/journal/${props.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ body: editBody.value }),
+    });
+    body.value = editBody.value;
+    editing.value = false;
+  } finally {
+    saving.value = false;
+  }
+}
+
 watch(
   () => [props.folder, props.id],
   async ([folder, id]) => {
     loading.value = true;
     error.value = false;
+    editing.value = false;
     try {
       const res = await fetch(`/api/vault/${folder}/${id}`);
       if (!res.ok) throw new Error("not found");
@@ -165,6 +193,19 @@ watch(
 
       <p v-if="loading" class="hint">Loading…</p>
       <p v-else-if="error" class="hint">Couldn't load this note.</p>
+      <template v-else-if="isJournal">
+        <div v-if="editing" class="edit-area">
+          <textarea v-model="editBody" class="edit-textarea" rows="14"></textarea>
+          <div class="edit-actions">
+            <button class="cancel-edit" :disabled="saving" @click="cancelEdit">Cancel</button>
+            <button class="save-edit" :disabled="saving" @click="saveEdit">{{ saving ? "Saving…" : "Save" }}</button>
+          </div>
+        </div>
+        <template v-else>
+          <button class="edit-toggle" @click="startEdit">Edit</button>
+          <div class="markdown-body" v-html="html" @click="onBodyClick"></div>
+        </template>
+      </template>
       <div v-else class="markdown-body" v-html="html" @click="onBodyClick"></div>
     </div>
   </div>
@@ -267,6 +308,23 @@ h2 { margin: 0 0 var(--space-1); padding-right: var(--space-5); font-weight: 600
   .review-actions { flex-direction: row; width: 100%; }
   .review-actions button { flex: 1; }
 }
+.edit-toggle {
+  background: none; border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+  padding: 0.3rem 0.7rem; cursor: pointer; font: inherit; font-size: 0.8rem; color: var(--color-ink-soft);
+  margin-bottom: var(--space-2);
+}
+.edit-toggle:hover { background: rgba(var(--shadow-tint), 0.06); }
+.edit-area { display: flex; flex-direction: column; gap: var(--space-2); }
+.edit-textarea {
+  width: 100%; box-sizing: border-box; font: inherit; font-size: 0.9rem; line-height: 1.5;
+  padding: var(--space-3); border-radius: var(--radius-sm); border: 1px solid var(--color-border);
+  resize: vertical; background: var(--color-bg);
+}
+.edit-textarea:focus { outline: none; border-color: var(--color-accent); }
+.edit-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
+.edit-actions button { font: inherit; font-size: 0.85rem; padding: 0.4rem 0.9rem; border-radius: var(--radius-sm); border: 1px solid var(--color-border); cursor: pointer; }
+.save-edit { background: var(--color-accent); color: white; border-color: var(--color-accent); }
+.save-edit:disabled, .cancel-edit:disabled { opacity: 0.6; cursor: default; }
 .markdown-body { font-size: clamp(0.95rem, 0.85rem + 0.2vw, 1.05rem); max-width: 68ch; }
 .markdown-body :deep(h1),
 .markdown-body :deep(h2),
