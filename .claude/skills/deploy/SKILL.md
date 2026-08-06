@@ -42,6 +42,20 @@ anything other than Raymond's own authenticated Tailscale devices.
    Update the two absolute paths inside the plist first if the repo has
    moved. Logs land at `/tmp/task-hub-server.stdout.log` /
    `.stderr.log` — check those first if the phone can't reach it.
+5. **Enable Tailscale HTTPS Serve** so the phone gets a secure context
+   (plain `http://<mac-name>:4173` fails `getUserMedia`/mic permission
+   prompts on mobile browsers, which require HTTPS). One-time per tailnet:
+   visit the enable-serve link Tailscale prints (`tailscale serve --bg
+   --https=443 http://localhost:4173` will show it the first time if Serve
+   isn't enabled yet — requires a browser click, can't be done headlessly).
+   Once enabled, run:
+   ```
+   tailscale serve --bg --https=443 http://localhost:4173
+   ```
+   This proxies TLS on 443 to the production server and persists across
+   reboots. Phone access is then `https://<mac-name>.<tailnet>.ts.net/`
+   instead of `http://<mac-name>:4173`. To disable: `tailscale serve
+   --https=443 off`.
 
 Do not perform steps 1–3 yourself (they require interactive OS-level
 install/login) — walk Raymond through them and confirm each one, don't
@@ -63,9 +77,11 @@ assume they're already done.
    (`kickstart -k` restarts a LaunchAgent that's already loaded; use this
    instead of unload/load unless the plist itself changed.)
 4. **Smoke-test** before calling it done: `curl -s -o /dev/null -w '%{http_code}\n' http://localhost:4173/` and the same against `/api/tasks` should
-   both return `200`. Then check reachability from the phone's Tailscale
-   IP/MagicDNS name if the user is available to confirm (`http://<mac-tailscale-name>:4173`)
-   — don't just assume the phone side works from the Mac-side check alone.
+   both return `200`. Then check reachability from the phone over the
+   HTTPS Tailscale Serve URL if the user is available to confirm
+   (`https://<mac-tailscale-name>.<tailnet>.ts.net/`, e.g.
+   `https://qip-innovations-macbook-air-2.tailf71164.ts.net/`) — don't
+   just assume the phone side works from the Mac-side check alone.
 5. **Report** what changed since the last deploy (a short changelog from
    `git log`), whether the build/restart/smoke-test each succeeded, and
    the URL to open on the phone.

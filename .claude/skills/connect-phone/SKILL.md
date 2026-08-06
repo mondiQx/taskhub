@@ -46,8 +46,12 @@ After starting, confirm with:
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:4173/
 ```
 Expect `200`. Then tell the user the phone can reach it at
-`http://<mac-tailscale-name>:4173` (get the tailscale name via
-`tailscale status` if unsure).
+`https://<mac-tailscale-name>.<tailnet>.ts.net/` (get the exact hostname
+via `tailscale status`) — this is the HTTPS Tailscale Serve endpoint
+(`tailscale serve --bg --https=443 http://localhost:4173`, see the
+`deploy` skill's one-time setup), which is required for mic/getUserMedia
+permission prompts to work on mobile browsers. Plain `http://<mac-name>:4173`
+still works for non-mic use but silently fails the mic permission prompt.
 
 ### Stop / disconnect
 
