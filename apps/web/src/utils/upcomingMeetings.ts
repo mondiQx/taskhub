@@ -157,7 +157,18 @@ export function projectNextOccurrence(sg: SeriesGroup): string | null {
 function projectOccurrences(sg: SeriesGroup, lookaheadDays: number): string[] {
   const cadence = parseCadence(sg.latest.recurs);
   if (!cadence || cadence.kind === "days") {
-    const next = sg.occurrences.length >= 2 ? projectNextOccurrence(sg) : cadence ? stepToFuture(sg.latest.start, cadence) : null;
+    // No cadence to project from (missing/unparseable `recurs`, only one
+    // cached occurrence) — if that lone occurrence hasn't happened yet, it's
+    // still a real upcoming meeting, so surface it as-is rather than
+    // dropping the whole series.
+    const next =
+      sg.occurrences.length >= 2
+        ? projectNextOccurrence(sg)
+        : cadence
+          ? stepToFuture(sg.latest.start, cadence)
+          : new Date(sg.latest.start).getTime() >= Date.now()
+            ? sg.latest.start
+            : null;
     return next && daysUntil(next) <= lookaheadDays ? [next] : [];
   }
 

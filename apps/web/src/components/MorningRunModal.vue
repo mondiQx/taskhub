@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
+import { marked } from "marked";
 import { useAutomationStore } from "../stores/automationStore";
+
+marked.setOptions({ breaks: true });
+function renderLine(line: string) {
+  return marked.parse(line) as string;
+}
 
 defineEmits<{ close: [] }>();
 const automation = useAutomationStore();
@@ -28,7 +34,10 @@ watch(
 const STATUS_ICON: Record<string, string> = { running: "●", done: "✓", error: "✕", stopped: "■" };
 
 function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const d = new Date(iso);
+  const isToday = d.toDateString() === new Date().toDateString();
+  if (isToday) return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 </script>
 
@@ -60,7 +69,7 @@ function fmtTime(iso: string) {
           <div class="log" ref="logEl">
             <p v-if="!run" class="empty">Click "Start my day" to run your morning routine now.</p>
             <template v-else>
-              <p v-for="(line, i) in run.log" :key="i">{{ line }}</p>
+              <div v-for="(line, i) in run.log" :key="i" class="log-line" v-html="renderLine(line)"></div>
               <p v-if="!run.log.length && run.status === 'running'" class="empty">Starting…</p>
               <p v-if="run.error" class="error">{{ run.error }}</p>
             </template>
@@ -114,8 +123,23 @@ header h2 { margin: 0; font-size: 1rem; }
 
 .live { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .log { flex: 1; overflow-y: auto; padding: var(--space-4); font-size: 0.85rem; line-height: 1.5; }
-.log p { margin: 0 0 var(--space-3); white-space: pre-wrap; }
 .log .error { color: #b3402a; }
+.log-line { margin: 0 0 var(--space-3); }
+.log-line :deep(p) { margin: 0 0 var(--space-2); white-space: pre-wrap; }
+.log-line :deep(p:last-child) { margin-bottom: 0; }
+.log-line :deep(ul),
+.log-line :deep(ol) { margin: 0 0 var(--space-2); padding-left: 1.3em; }
+.log-line :deep(li) { margin-bottom: var(--space-1); }
+.log-line :deep(code) {
+  background: rgba(47, 42, 36, 0.08); border-radius: 4px; padding: 0.1em 0.35em; font-size: 0.9em;
+}
+.log-line :deep(pre) {
+  background: rgba(47, 42, 36, 0.06); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3);
+  overflow-x: auto;
+}
+.log-line :deep(pre code) { background: none; padding: 0; }
+.log-line :deep(a) { color: var(--color-accent); }
+.log-line :deep(strong) { font-weight: 700; }
 footer {
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
   padding: var(--space-3) var(--space-4); border-top: 1px solid var(--color-border);

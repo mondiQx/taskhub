@@ -33,13 +33,24 @@ function startMyDay() {
   automation.run();
 }
 
+function viewMorningRun() {
+  showMorningRun.value = true;
+}
+
 const START_HOLD_MS = 500;
 const startHolding = ref(false);
 let startHoldTimer: number | undefined;
 const isMobile = () => !window.matchMedia("(min-width: 768px)").matches;
 
 function startHoldToBegin() {
-  if (!isMobile() || automation.current?.status === "running" || startHolding.value) return;
+  // Already running — just reopen the modal to watch it, no hold gesture
+  // needed since this isn't starting anything new. (Once finished, the
+  // dedicated "view last run" button covers reopening without a hold.)
+  if (automation.current?.status === "running") {
+    viewMorningRun();
+    return;
+  }
+  if (!isMobile() || startHolding.value) return;
   startHolding.value = true;
   startHoldTimer = window.setTimeout(() => {
     startHolding.value = false;
@@ -97,8 +108,7 @@ onMounted(() => {
         <button
           class="start-my-day"
           :class="{ holding: startHolding }"
-          :disabled="automation.current?.status === 'running'"
-          :title="isMobile() ? 'Hold to start' : undefined"
+          :title="automation.current?.status === 'running' ? 'View run' : isMobile() ? 'Hold to start' : undefined"
           @click="startMyDayClick"
           @pointerdown="startHoldToBegin"
           @pointerup="cancelStartHold"
@@ -109,6 +119,15 @@ onMounted(() => {
           <span class="start-my-day-label">
             {{ automation.current?.status === "running" ? "Running…" : startHolding ? "Keep holding…" : "Start my day" }}
           </span>
+        </button>
+        <button
+          v-if="automation.current"
+          class="view-run"
+          title="View last run"
+          aria-label="View last run"
+          @click="viewMorningRun"
+        >
+          🕘
         </button>
         <button
           class="toggle-done"
@@ -286,6 +305,7 @@ header h1 { font-size: 1rem; font-weight: 600; letter-spacing: -0.01em; margin: 
 }
 .start-my-day.holding .start-my-day-fill { width: 100%; }
 .start-my-day-label { position: relative; z-index: 1; }
+.view-run { font-size: 0.95rem; line-height: 1; padding: 0.35rem 0.55rem; }
 .right { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .status { font-size: 0.75rem; opacity: 0.6; white-space: nowrap; }
 .status.connected { opacity: 1; color: #8be28b; }
