@@ -1,5 +1,7 @@
-Run the full morning routine in order, reporting a short summary after
-each step rather than waiting until the end:
+Launch the `personal-assistant` agent to run the full morning routine in
+order within a single agent invocation (later steps depend on the vault
+state left by earlier ones), reporting a short summary after each step
+rather than waiting until the end:
 
 1. `sync-gmail` skill — pull new/updated Gmail threads into `vault/tasks/`.
 2. `sync-jira` skill — pull assigned Jira issues into `vault/tasks/`.
