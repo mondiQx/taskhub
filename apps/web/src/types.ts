@@ -21,6 +21,20 @@ export interface HistoryEntry {
   note?: string;
 }
 
+/**
+ * A single entry from customizer-core's `knowledge/ticket-history.json`,
+ * attached read-only to a Jira-sourced task's detail response. See
+ * `apps/server/src/vault/ticketBridge.ts` for how this is looked up.
+ */
+export interface TicketHistoryEntry {
+  key?: string;
+  title?: string;
+  rootCause?: string | null;
+  fixType?: string | null;
+  responsibleTeam?: string | null;
+  confidence?: string | null;
+}
+
 export interface Meeting {
   id: string;
   title: string;
@@ -86,4 +100,9 @@ export interface Task {
   history: HistoryEntry[];
   body: string;
   filePath: string;
+  /**
+   * Read-time, best-effort annotation from customizer-core's ticket-history
+   * knowledge file. Only set for jira-sourced tasks.
+   */
+  ticketHistory?: TicketHistoryEntry | null;
 }

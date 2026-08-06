@@ -1,6 +1,7 @@
 import type { Server as HttpServer } from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
 import { taskRepository, type TaskChangeEvent } from "../vault/taskRepository.js";
+import { withTicketHistory } from "../vault/ticketBridge.js";
 import { getHistory, morningEvents, type MorningRun } from "../automation/morningRun.js";
 import { getJournalAnalysisHistory, journalAnalysisEvents, type JournalAnalysisRun } from "../automation/journalAnalysisRun.js";
 import { reviewQueueRepository, type ReviewChangeEvent, type ReviewItem } from "../vault/reviewQueue.js";
@@ -20,11 +21,17 @@ export type ServerEvent =
 
 let wss: WebSocketServer | undefined;
 
+/** Annotates a task-change event's `task` payload (add/update cases) with ticketHistory before broadcasting. */
+async function annotateChangeEvent(event: TaskChangeEvent): Promise<TaskChangeEvent> {
+  if (!event.task) return event;
+  return { ...event, task: await withTicketHistory(event.task) };
+}
+
 export function startWebSocketServer(server: HttpServer): void {
   wss = new WebSocketServer({ server, path: "/ws" });
 
   taskRepository.on("change", (event: TaskChangeEvent) => {
-    broadcast({ channel: "task", payload: event });
+    void annotateChangeEvent(event).then((annotated) => broadcast({ channel: "task", payload: annotated }));
   });
 
   morningEvents.on("change", (run: MorningRun) => {
@@ -44,7 +51,8 @@ export function startWebSocketServer(server: HttpServer): void {
   });
 
   wss.on("connection", async (socket) => {
-    socket.send(JSON.stringify({ channel: "snapshot", payload: { tasks: taskRepository.list() } } satisfies ServerEvent));
+    const tasks = await Promise.all(taskRepository.list().map(withTicketHistory));
+    socket.send(JSON.stringify({ channel: "snapshot", payload: { tasks } } satisfies ServerEvent));
     socket.send(
       JSON.stringify({ channel: "review-snapshot", payload: { items: await reviewQueueRepository.list() } } satisfies ServerEvent),
     );

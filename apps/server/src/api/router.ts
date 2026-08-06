@@ -13,6 +13,8 @@ import {
 import { reviewQueueRepository } from "../vault/reviewQueue.js";
 import { journalReviewRepository } from "../vault/journalReview.js";
 import { appendJournalEntry, listJournalEntries, updateJournalEntryBody } from "../vault/journalRepository.js";
+import { lookupTicketHistory, withTicketHistory } from "../vault/ticketBridge.js";
+import path from "node:path";
 import type { NewTaskInput } from "../types.js";
 
 export const router = Router();
@@ -71,11 +73,22 @@ router.get("/vault/:folder/:id", async (req, res) => {
     res.status(404).json({ error: "not found" });
     return;
   }
+  if (req.params.folder === "tasks") {
+    // `req.params.id` here is the task's filename slug (matching readVaultFile's own
+    // resolution), not task.id — those are independently-generated nanoids and don't match.
+    const task = taskRepository
+      .list()
+      .find((t) => path.basename(t.filePath).replace(/\.md$/, "").toLowerCase() === req.params.id.toLowerCase());
+    if (task && task.source.type === "jira" && task.source.externalId) {
+      res.json({ ...file, ticketHistory: await lookupTicketHistory(task.source.externalId) });
+      return;
+    }
+  }
   res.json(file);
 });
 
-router.get("/tasks", (_req, res) => {
-  res.json(taskRepository.list());
+router.get("/tasks", async (_req, res) => {
+  res.json(await Promise.all(taskRepository.list().map(withTicketHistory)));
 });
 
 router.post("/tasks", async (req, res) => {
