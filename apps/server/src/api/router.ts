@@ -13,6 +13,7 @@ import {
 import { reviewQueueRepository } from "../vault/reviewQueue.js";
 import { journalReviewRepository } from "../vault/journalReview.js";
 import { appendJournalEntry, listJournalEntries } from "../vault/journalRepository.js";
+import { cleanVoiceTranscript } from "../automation/voiceCleanup.js";
 import type { NewTaskInput } from "../types.js";
 
 export const router = Router();
@@ -214,6 +215,20 @@ router.post("/journal-review/:id/reject", async (req, res) => {
 
 router.get("/journal", async (_req, res) => {
   res.json(await listJournalEntries());
+});
+
+router.post("/journal/clean-transcript", async (req, res) => {
+  const { text } = req.body as { text?: string };
+  if (!text?.trim()) {
+    res.status(400).json({ error: "text is required" });
+    return;
+  }
+  try {
+    const cleaned = await cleanVoiceTranscript(text);
+    res.json({ cleaned });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
 });
 
 router.post("/journal", async (req, res) => {

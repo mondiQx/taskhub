@@ -40,6 +40,14 @@ Append the user's input, unedited, to `vault/journal/<today>.md` under a
 unconditionally, before any interpretation — it's the ground truth record,
 independent of whatever gets extracted or how well the extraction goes.
 
+Exception: entries dictated through the web app's mic button are run through
+a wording/grammar cleanup pass (`POST /api/journal/clean-transcript`, backed
+by a headless `claude -p` call — see `apps/server/src/automation/
+voiceCleanup.ts`) before being written, since raw ASR output for a non-native
+speaker is often unusable verbatim. Only text the mic captured untouched by
+further typing goes through this; anything hand-typed (in this skill's flow,
+or edited after dictation in the app) is still written exactly as given.
+
 If the input contains content that reads as personal/reflective rather
 than actionable (career interests, frustrations, general venting, morale) —
 add it to a `## Personal notes` section in the same journal file instead of
