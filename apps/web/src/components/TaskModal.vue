@@ -35,7 +35,6 @@ const draftBody = ref("");
 const draftPriority = ref<TaskPriority>("medium");
 const draftDue = ref("");
 const draftTags = ref<string[]>([]);
-const draftMeeting = ref<{ eventId: string; title: string; start: string } | null>(null);
 
 const editTitle = ref("");
 const editBody = ref("");
@@ -162,38 +161,9 @@ function onBodyBlur() {
   }
 }
 
-interface CalendarEvent {
-  id: string;
-  title: string;
-  start: string;
-}
-
-const events = ref<CalendarEvent[]>([]);
-async function loadEvents() {
-  const [liveRes, vaultRes] = await Promise.all([fetch("/api/calendar/events"), fetch("/api/meetings")]);
-  const [live, vault]: [CalendarEvent[], CalendarEvent[]] = [await liveRes.json(), await vaultRes.json()];
-  events.value = [...vault, ...live].sort((a, b) => b.start.localeCompare(a.start));
-}
-if (props.mode === "create") loadEvents();
-watch(
-  () => props.task?.id,
-  (id) => {
-    if (!id || props.mode !== "edit") return;
-    loadEvents();
-  },
-  { immediate: true },
-);
-
-function onSelectMeeting(e: Event) {
-  const eventId = (e.target as HTMLSelectElement).value;
-  const event = eventId ? events.value.find((ev) => ev.id === eventId) : undefined;
-  const meeting = event ? { eventId: event.id, title: event.title, start: event.start } : null;
-  if (props.mode === "create") {
-    draftMeeting.value = meeting;
-    return;
-  }
+function unlinkMeeting() {
   if (!props.task) return;
-  emit("linkMeeting", props.task.id, meeting);
+  emit("linkMeeting", props.task.id, null);
 }
 
 const HOLD_MS = 3000;
@@ -224,14 +194,13 @@ function submitCreate() {
     priority: draftPriority.value,
     due: draftDue.value ? new Date(`${draftDue.value}T00:00:00`).toISOString() : null,
     tags: draftTags.value,
-    relatedMeeting: draftMeeting.value,
+    relatedMeeting: null,
   });
   draftTitle.value = "";
   draftBody.value = "";
   draftPriority.value = "medium";
   draftDue.value = "";
   draftTags.value = [];
-  draftMeeting.value = null;
 }
 </script>
 
@@ -308,17 +277,6 @@ function submitCreate() {
         </div>
       </div>
 
-      <template v-if="mode === 'create'">
-        <h3>Discuss in meeting</h3>
-        <select class="meeting-select" :value="draftMeeting?.eventId ?? ''" @change="onSelectMeeting">
-          <option value="">Not linked to a meeting</option>
-          <option v-for="event in events" :key="event.id" :value="event.id" :title="`${event.title} — ${new Date(event.start).toLocaleString()}`">
-            {{ event.title }} — {{ new Date(event.start).toLocaleString() }}
-          </option>
-        </select>
-        <p v-if="!events.length" class="hint">No meetings found (nothing cached in vault/meetings, and Calendar not connected or nothing upcoming in the next 24h).</p>
-      </template>
-
       <template v-if="mode === 'edit' && task">
         <div class="actions">
           <button v-if="task.status !== 'done'" @click="emit('complete', task.id)">Mark done</button>
@@ -326,13 +284,12 @@ function submitCreate() {
         </div>
 
         <h3>Discuss in meeting</h3>
-        <select class="meeting-select" :value="task.relatedMeeting?.eventId ?? ''" @change="onSelectMeeting">
-          <option value="">Not linked to a meeting</option>
-          <option v-for="event in events" :key="event.id" :value="event.id" :title="`${event.title} — ${new Date(event.start).toLocaleString()}`">
-            {{ event.title }} — {{ new Date(event.start).toLocaleString() }}
-          </option>
-        </select>
-        <p v-if="!events.length" class="hint">No meetings found (nothing cached in vault/meetings, and Calendar not connected or nothing upcoming in the next 24h).</p>
+        <div v-if="task.relatedMeeting" class="meeting-link">
+          <span class="meeting-link-title">{{ task.relatedMeeting.title }}</span>
+          <span class="meeting-link-time">{{ new Date(task.relatedMeeting.start).toLocaleString() }}</span>
+          <button class="clear-due" @click="unlinkMeeting">Unlink</button>
+        </div>
+        <p v-else class="hint">Not linked — drag this task's card onto a meeting in "Coming up" to link it.</p>
 
         <h3>History</h3>
         <ul class="history">
@@ -469,21 +426,18 @@ h3 { font-weight: 600; font-size: 0.95rem; letter-spacing: -0.005em; }
 .field select, .field input[type="date"] { padding: 0.35rem; border-radius: var(--radius-sm); border: 1px solid var(--color-border); font: inherit; transition: border-color 140ms var(--ease); }
 .field select:focus, .field input[type="date"]:focus { outline: none; border-color: var(--color-accent); }
 .due-row { display: flex; align-items: center; gap: var(--space-1); }
-.meeting-select {
-  display: block;
-  width: 100%;
-  max-width: 100%;
-  box-sizing: border-box;
-  padding: 0.35rem;
+.meeting-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0.4rem 0.6rem;
   border-radius: var(--radius-sm);
   border: 1px solid var(--color-border);
-  font: inherit;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  transition: border-color 140ms var(--ease);
+  font-size: 0.85rem;
 }
-.meeting-select:focus { outline: none; border-color: var(--color-accent); }
+.meeting-link-title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meeting-link-time { color: var(--color-ink-soft); font-size: 0.78rem; white-space: nowrap; }
+.meeting-link .clear-due { margin-left: auto; }
 .clear-due { font-size: 0.7rem; padding: 0.15rem 0.4rem; cursor: pointer; flex-shrink: 0; }
 .actions { margin: var(--space-3) 0; }
 .actions button {

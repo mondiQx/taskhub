@@ -20,6 +20,18 @@ function tasksFor(eventId: string | undefined) {
   return taskStore.tasks.filter((t) => t.status !== "archived" && t.relatedMeeting?.eventId === eventId);
 }
 
+const dragOverKey = ref<string | null>(null);
+
+function onDrop(e: DragEvent, m: (typeof items.value)[number]) {
+  dragOverKey.value = null;
+  if (!m.eventId) return;
+  const taskId = e.dataTransfer?.getData("text/plain");
+  if (!taskId) return;
+  taskStore.patch(taskId, {
+    relatedMeeting: { eventId: m.eventId, title: m.title, start: m.start, reminderFired: false },
+  });
+}
+
 const trackEl = ref<HTMLElement | null>(null);
 const atStart = ref(true);
 const atEnd = ref(false);
@@ -52,7 +64,16 @@ function scrollByCards(dir: 1 | -1) {
         ‹
       </button>
       <ul ref="trackEl" class="chips" @scroll="updateEdges">
-        <li v-for="m in items" :key="m.key" class="chip" @click="emit('open-meeting', m.id)">
+        <li
+          v-for="m in items"
+          :key="m.key"
+          class="chip"
+          :class="{ 'drag-over': dragOverKey === m.key }"
+          @click="emit('open-meeting', m.id)"
+          @dragover.prevent="m.eventId && (dragOverKey = m.key)"
+          @dragleave="dragOverKey = null"
+          @drop.prevent="onDrop($event, m)"
+        >
           <span class="top-row">
             <span class="relative">{{ m.relative }}</span>
             <span v-if="m.recurring" class="recurring-badge" title="Recurring meeting">↻</span>
@@ -114,6 +135,7 @@ function scrollByCards(dir: 1 | -1) {
   width: 160px;
 }
 .chip:hover { border-color: var(--color-accent); transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.chip.drag-over { border-color: var(--color-accent); border-style: dashed; background: rgba(193, 103, 58, 0.08); }
 .top-row { display: flex; align-items: center; justify-content: space-between; gap: 0.3rem; }
 .chip .relative { font-weight: 700; font-size: 0.8rem; color: var(--color-accent); }
 .chip .title {
