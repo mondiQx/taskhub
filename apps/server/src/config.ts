@@ -19,4 +19,10 @@ export const config = {
     botToken: process.env.SLACK_BOT_TOKEN ?? "",
   },
   credentialsDir: path.resolve(process.cwd(), "../../.credentials"),
+  // Optional: local checkout of customizer-core's `.claude` dir, used to read-only
+  // annotate Jira-sourced tasks with prior investigation history. Undefined (feature
+  // no-ops) on any machine that doesn't have that repo checked out.
+  customizerCorePath: process.env.CUSTOMIZER_CORE_PATH
+    ? path.resolve(process.cwd(), process.env.CUSTOMIZER_CORE_PATH)
+    : undefined,
 };

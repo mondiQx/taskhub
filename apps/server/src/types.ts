@@ -1,3 +1,5 @@
+import type { TicketHistoryEntry } from "./vault/ticketBridge.js";
+
 export type TaskStatus = "open" | "in-progress" | "done" | "archived";
 export type TaskPriority = "low" | "medium" | "high" | "urgent";
 export type SourceType = "gmail" | "jira" | "slack" | "gcal" | "manual" | "voice";
@@ -38,6 +40,12 @@ export interface Task {
   body: string;
   /** Absolute path to the backing markdown file, not part of the frontmatter. */
   filePath: string;
+  /**
+   * Read-time, best-effort annotation from customizer-core's ticket-history
+   * knowledge file — not part of the frontmatter, never persisted. Only set
+   * for jira-sourced tasks when `CUSTOMIZER_CORE_PATH` is configured.
+   */
+  ticketHistory?: TicketHistoryEntry | null;
 }
 
 export type NewTaskInput = Pick<Task, "title"> &

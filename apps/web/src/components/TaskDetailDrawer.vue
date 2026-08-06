@@ -185,6 +185,11 @@ function onSelectMeeting(e: Event) {
     </ul>
 
     <p class="source">Source: {{ task.source.type }} <a v-if="task.source.url" :href="task.source.url" target="_blank">open</a></p>
+    <p v-if="task.ticketHistory" class="ticket-bridge">
+      Already investigated in customizer-core — {{ task.ticketHistory.fixType ?? "unknown" }} fix,
+      {{ task.ticketHistory.responsibleTeam ?? "team unknown" }}.
+      <span v-if="task.ticketHistory.rootCause">{{ task.ticketHistory.rootCause }}</span>
+    </p>
   </aside>
 </template>
 
@@ -214,6 +219,7 @@ function onSelectMeeting(e: Event) {
 .history { list-style: none; padding: 0; font-size: 0.8rem; opacity: 0.85; }
 .history li { margin-bottom: 0.35rem; }
 .source { font-size: 0.8rem; opacity: 0.7; }
+.ticket-bridge { font-size: 0.8rem; opacity: 0.85; margin-top: 0.5rem; }
 select { width: 100%; padding: 0.4rem; margin-bottom: 0.25rem; }
 input[type="date"] { padding: 0.35rem; margin-right: 0.5rem; }
 .clear-due { font-size: 0.75rem; padding: 0.2rem 0.5rem; }
