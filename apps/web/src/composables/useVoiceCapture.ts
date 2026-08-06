@@ -35,16 +35,30 @@ export function useVoiceCapture(onStopped: (transcript: string) => void) {
     recognition.lang = "en-US";
 
     recognition.onresult = (event) => {
-      // event.results is cumulative and never shrinks, but resultIndex is unreliable
-      // (especially on mobile Chrome) — rebuild finalSegments from the full list each
-      // time rather than pushing, or revised/re-final-ized entries get duplicated.
+      // On mobile Chrome, event.results can contain multiple "final" entries that are
+      // each a growing re-hypothesis of the SAME utterance ("assign" / "assign ticket"
+      // / "assign ticket to adonis") rather than genuinely separate phrases — joining
+      // every final entry duplicates the whole thing. Collapse a final entry into the
+      // previous one whenever one is a prefix of the other (same utterance, revised);
+      // only entries that aren't prefix-related are treated as a distinct new phrase.
       let interimText = "";
-      finalSegments = [];
+      const segments: string[] = [];
       for (let i = 0; i < event.results.length; i++) {
         const result = event.results[i];
-        if (result.isFinal) finalSegments.push(result[0].transcript);
-        else interimText += result[0].transcript;
+        if (!result.isFinal) {
+          interimText += result[0].transcript;
+          continue;
+        }
+        const text = result[0].transcript.trim();
+        if (!text) continue;
+        const prev = segments[segments.length - 1];
+        if (prev && (text.startsWith(prev) || prev.startsWith(text))) {
+          segments[segments.length - 1] = text.length > prev.length ? text : prev;
+        } else {
+          segments.push(text);
+        }
       }
+      finalSegments = segments;
       interimTranscript.value = interimText;
     };
     // The lib.dom types this project uses don't declare onerror/error on

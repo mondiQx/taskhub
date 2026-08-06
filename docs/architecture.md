@@ -15,9 +15,11 @@ any Claude Code session opened in this repo can act correctly on the vault.
 - `apps/web` — Vue 3 + Vite SPA. Pinned as a Chrome tab. Kanban / list /
   post-it views over the same task set, voice capture via the Web Speech
   API, browser notifications for meeting reminders.
-- `.claude/skills/sync-inbox` — pulls Gmail + Jira into `vault/tasks/` using
-  this session's existing MCP connections. Run via `/sync` or a scheduled
-  headless run. Deliberately has no OAuth client or API token of its own.
+- `.claude/skills/sync-gmail`, `sync-jira`, `sync-calendar` — pull Gmail,
+  Jira, and Calendar data into `vault/tasks/`/`vault/meetings/` using this
+  session's existing MCP connections. Run individually via `/sync-gmail`,
+  `/sync-jira`, `/sync-calendar`, or together via `/morning`. Deliberately
+  have no OAuth client or API token of their own.
 
 ## Why the vault is the database
 

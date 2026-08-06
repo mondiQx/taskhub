@@ -51,6 +51,13 @@ function insertUnderHeading(content: string, heading: string, line: string): str
   return `${content.slice(0, insertAt)}\n${line}\n${content.slice(insertAt)}`;
 }
 
+/** Overwrites a journal file's full raw markdown body — used for hand-correcting a voice-dictated entry. */
+export async function updateJournalEntryBody(date: string, body: string): Promise<JournalEntrySummary> {
+  const filePath = path.join(journalDir, `${date}.md`);
+  await fs.writeFile(filePath, body, "utf8");
+  return { date, preview: previewOf(body) };
+}
+
 /**
  * Appends a captured entry to today's journal file, always verbatim and always first —
  * this is the ground-truth raw-dump record described in CLAUDE.md, independent of

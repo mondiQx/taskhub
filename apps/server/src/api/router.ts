@@ -12,7 +12,7 @@ import {
 } from "../automation/journalAnalysisRun.js";
 import { reviewQueueRepository } from "../vault/reviewQueue.js";
 import { journalReviewRepository } from "../vault/journalReview.js";
-import { appendJournalEntry, listJournalEntries } from "../vault/journalRepository.js";
+import { appendJournalEntry, listJournalEntries, updateJournalEntryBody } from "../vault/journalRepository.js";
 import type { NewTaskInput } from "../types.js";
 
 export const router = Router();
@@ -224,6 +224,20 @@ router.post("/journal", async (req, res) => {
   }
   const entry = await appendJournalEntry(text, section === "Personal notes" ? "Personal notes" : "Journal");
   res.status(201).json(entry);
+});
+
+router.patch("/journal/:date", async (req, res) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(req.params.date)) {
+    res.status(400).json({ error: "date must be YYYY-MM-DD" });
+    return;
+  }
+  const { body } = req.body as { body?: string };
+  if (typeof body !== "string") {
+    res.status(400).json({ error: "body is required" });
+    return;
+  }
+  const entry = await updateJournalEntryBody(req.params.date, body);
+  res.json(entry);
 });
 
 router.post("/voice-note", async (req, res) => {
