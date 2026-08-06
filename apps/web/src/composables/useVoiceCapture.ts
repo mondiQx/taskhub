@@ -4,9 +4,10 @@ import { reactive, ref } from "vue";
 const SpeechRecognitionCtor: typeof window.SpeechRecognition | undefined =
   (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
 
-// Fires once, with the full accumulated transcript, only when the user explicitly
-// stops recording — not per browser-detected "final" chunk. The Web Speech API treats
-// any pause as final, so submitting per-chunk would cut the user off mid-thought.
+// Fires once, with the full accumulated transcript, whenever recognition ends —
+// whether the user clicked stop or the browser ended it on its own (mobile browsers
+// commonly do this after a brief pause) — rather than per browser-detected "final"
+// chunk, since the Web Speech API treats any pause as final.
 export function useVoiceCapture(onStopped: (transcript: string) => void) {
   const supported = Boolean(SpeechRecognitionCtor);
   const recording = ref(false);
@@ -15,7 +16,6 @@ export function useVoiceCapture(onStopped: (transcript: string) => void) {
 
   let recognition: SpeechRecognition | undefined;
   let finalSegments: string[] = [];
-  let stoppedManually = false;
 
   function start() {
     if (!SpeechRecognitionCtor || recording.value) return;
@@ -29,15 +29,18 @@ export function useVoiceCapture(onStopped: (transcript: string) => void) {
       return;
     }
     finalSegments = [];
-    stoppedManually = false;
     recognition = new SpeechRecognitionCtor();
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = "en-US";
 
     recognition.onresult = (event) => {
+      // event.results is cumulative and never shrinks, but resultIndex is unreliable
+      // (especially on mobile Chrome) — rebuild finalSegments from the full list each
+      // time rather than pushing, or revised/re-final-ized entries get duplicated.
       let interimText = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
+      finalSegments = [];
+      for (let i = 0; i < event.results.length; i++) {
         const result = event.results[i];
         if (result.isFinal) finalSegments.push(result[0].transcript);
         else interimText += result[0].transcript;
@@ -55,12 +58,11 @@ export function useVoiceCapture(onStopped: (transcript: string) => void) {
     recognition.onend = () => {
       recording.value = false;
       interimTranscript.value = "";
-      // The API can end on its own (e.g. long silence) without the user clicking stop;
-      // only hand off the transcript when they actually asked to stop.
-      if (stoppedManually) {
-        const transcript = finalSegments.join(" ").trim();
-        if (transcript) onStopped(transcript);
-      }
+      // Mobile browsers frequently end recognition on their own (e.g. after a brief
+      // pause) well before the user meant to stop — commit whatever was captured
+      // either way, instead of only on an explicit stop(), or it's silently lost.
+      const transcript = finalSegments.join(" ").trim();
+      if (transcript) onStopped(transcript);
     };
 
     try {
@@ -72,7 +74,6 @@ export function useVoiceCapture(onStopped: (transcript: string) => void) {
   }
 
   function stop() {
-    stoppedManually = true;
     recognition?.stop();
   }
 
