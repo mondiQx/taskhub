@@ -15,10 +15,6 @@ const entries = ref<JournalEntrySummary[]>([]);
 const draft = ref(localStorage.getItem(DRAFT_KEY) ?? "");
 const personal = ref(localStorage.getItem(DRAFT_PERSONAL_KEY) === "true");
 const saving = ref(false);
-const cleaningTranscript = ref(false);
-// True only while the draft is exactly what voice dictation produced — any manual
-// keystroke clears it, so typed/edited text never goes through transcript cleanup.
-const isPureVoiceDraft = ref(false);
 
 watch(draft, (value) => {
   if (value) localStorage.setItem(DRAFT_KEY, value);
@@ -34,32 +30,16 @@ async function load() {
 }
 
 async function submit() {
-  let text = draft.value.trim();
+  const text = draft.value.trim();
   if (!text || saving.value) return;
   saving.value = true;
   try {
-    if (isPureVoiceDraft.value) {
-      cleaningTranscript.value = true;
-      try {
-        const res = await fetch("/api/journal/clean-transcript", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text }),
-        });
-        if (res.ok) text = ((await res.json()) as { cleaned: string }).cleaned;
-      } catch {
-        // Fall back to the raw transcript if cleanup fails (e.g. claude CLI unavailable).
-      } finally {
-        cleaningTranscript.value = false;
-      }
-    }
     await fetch("/api/journal", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text, section: personal.value ? "Personal notes" : "Journal" }),
     });
     draft.value = "";
-    isPureVoiceDraft.value = false;
     personal.value = false;
     localStorage.removeItem(DRAFT_PERSONAL_KEY);
     await load();
@@ -70,12 +50,7 @@ async function submit() {
 
 const voice = useVoiceCapture((transcript) => {
   draft.value = draft.value ? `${draft.value} ${transcript}` : transcript;
-  isPureVoiceDraft.value = true;
 });
-
-function onManualEdit() {
-  isPureVoiceDraft.value = false;
-}
 
 function dateLabel(date: string): string {
   return new Date(`${date}T00:00:00`).toLocaleDateString(undefined, {
@@ -104,7 +79,6 @@ onMounted(() => journalReview.init());
         placeholder="Dump your thoughts... task updates, meeting recaps, whatever's on your mind."
         @keydown.enter.meta.prevent="submit"
         @keydown.enter.ctrl.prevent="submit"
-        @input="onManualEdit"
       />
       <p v-if="voice.interimTranscript" class="interim">{{ voice.interimTranscript }}</p>
       <p v-if="voice.error" class="voice-error">{{ voice.error }}</p>
@@ -124,7 +98,7 @@ onMounted(() => journalReview.init());
           {{ voice.recording ? "● Stop" : "🎤" }}
         </button>
         <button class="save-btn" :disabled="!draft.trim() || saving" @click="submit">
-          {{ cleaningTranscript ? "Cleaning up…" : saving ? "Saving…" : "Add entry" }}
+          {{ saving ? "Saving…" : "Add entry" }}
         </button>
       </div>
     </div>
