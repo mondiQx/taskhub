@@ -209,6 +209,7 @@ export function computeUpcomingItems(meetings: Meeting[], lookaheadDays: number)
   for (const m of meetings) {
     if (m.recurringEventId) continue; // recurring handled via projection below
     if (new Date(m.start).getTime() < now) continue;
+    if (daysUntil(m.start) > lookaheadDays) continue;
     items.push({
       id: m.id,
       key: m.id,

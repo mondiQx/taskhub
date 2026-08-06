@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from "vue";
 import { useMeetingsStore } from "../stores/meetingsStore";
 import { useTaskStore } from "../stores/taskStore";
 
-const props = withDefaults(defineProps<{ days?: number }>(), { days: 3 });
+const props = withDefaults(defineProps<{ days?: number }>(), { days: 7 });
 const emit = defineEmits<{ "open-meeting": [id: string]; "open-task": [id: string] }>();
 
 const meetingsStore = useMeetingsStore();

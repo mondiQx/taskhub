@@ -23,7 +23,7 @@ interface State {
 let socket: WebSocket | undefined;
 
 export const useTaskStore = defineStore("tasks", {
-  state: (): State => ({ tasks: [], connected: false, showDone: true, meetingAlert: null }),
+  state: (): State => ({ tasks: [], connected: false, showDone: false, meetingAlert: null }),
 
   actions: {
     toggleShowDone() {
