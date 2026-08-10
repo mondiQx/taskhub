@@ -17,6 +17,7 @@ export interface MorningRun {
   startedAt: string;
   finishedAt: string | null;
   log: string[];
+  activity: string | null;
   error: string | null;
 }
 
@@ -29,7 +30,11 @@ function loadHistory(): MorningRun[] {
   try {
     const runs = JSON.parse(fs.readFileSync(historyFile, "utf8")) as MorningRun[];
     // A run stuck "running" across a server restart lost its child process — mark it dead.
-    return runs.map((r) => (r.status === "running" ? { ...r, status: "error", error: "server restarted mid-run", finishedAt: r.startedAt } : r));
+    return runs.map((r) =>
+      r.status === "running"
+        ? { ...r, status: "error", error: "server restarted mid-run", finishedAt: r.startedAt, activity: null }
+        : r
+    );
   } catch {
     return [];
   }
@@ -78,6 +83,7 @@ export function startMorningRun(): MorningRun {
     startedAt: new Date().toISOString(),
     finishedAt: null,
     log: [],
+    activity: null,
     error: null,
   };
   history.unshift(run);
@@ -100,11 +106,28 @@ export function startMorningRun(): MorningRun {
       return;
     }
     if (msg.type === "assistant" && Array.isArray(msg.message?.content)) {
+      let changed = false;
       for (const block of msg.message.content) {
         if (block.type === "text" && typeof block.text === "string" && block.text.trim()) {
           run.log.push(block.text.trim());
+          run.activity = null;
+          changed = true;
+        } else if (block.type === "tool_use" && typeof block.name === "string") {
+          run.activity = `Running ${block.name}...`;
+          changed = true;
         }
       }
+      if (changed) emitChange(run);
+    } else if (msg.type === "user" && Array.isArray(msg.message?.content)) {
+      // A tool_result means the in-flight tool call finished — clear the
+      // transient "Running X..." indicator so it never lingers in the
+      // permanent log; the next text block (if any) will replace it.
+      if (msg.message.content.some((block: any) => block.type === "tool_result")) {
+        run.activity = null;
+        emitChange(run);
+      }
+    } else if (msg.type === "result") {
+      run.activity = null;
       emitChange(run);
     }
   });
@@ -115,6 +138,7 @@ export function startMorningRun(): MorningRun {
   child.on("error", (err) => {
     run.status = "error";
     run.finishedAt = new Date().toISOString();
+    run.activity = null;
     run.error = err.message;
     child = null;
     emitChange(run);
@@ -130,6 +154,7 @@ export function startMorningRun(): MorningRun {
       run.error = stderr.trim() || `exited with code ${code}`;
     }
     run.finishedAt = new Date().toISOString();
+    run.activity = null;
     emitChange(run);
   });
 
@@ -143,6 +168,7 @@ export function stopMorningRun(): MorningRun | null {
   child = null;
   run.status = "stopped";
   run.finishedAt = new Date().toISOString();
+  run.activity = null;
   run.log.push("— stopped by user —");
   emitChange(run);
   return run;
