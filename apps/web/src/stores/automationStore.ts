@@ -8,6 +8,7 @@ export interface MorningRun {
   startedAt: string;
   finishedAt: string | null;
   log: string[];
+  activity: string | null;
   error: string | null;
 }
 
