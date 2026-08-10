@@ -24,7 +24,7 @@ watch(
 
 const logEl = ref<HTMLElement | null>(null);
 watch(
-  () => run.value?.log.length,
+  () => [run.value?.log.length, run.value?.activity],
   async () => {
     await nextTick();
     if (logEl.value) logEl.value.scrollTop = logEl.value.scrollHeight;
@@ -70,7 +70,8 @@ function fmtTime(iso: string) {
             <p v-if="!run" class="empty">Click "Start my day" to run your morning routine now.</p>
             <template v-else>
               <div v-for="(line, i) in run.log" :key="i" class="log-line" v-html="renderLine(line)"></div>
-              <p v-if="!run.log.length && run.status === 'running'" class="empty">Starting…</p>
+              <p v-if="run.status === 'running' && run.activity" class="activity">{{ run.activity }}</p>
+              <p v-if="!run.log.length && !run.activity && run.status === 'running'" class="empty">Starting…</p>
               <p v-if="run.error" class="error">{{ run.error }}</p>
             </template>
           </div>
@@ -124,6 +125,7 @@ header h2 { margin: 0; font-size: 1rem; }
 .live { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .log { flex: 1; overflow-y: auto; padding: var(--space-4); font-size: 0.85rem; line-height: 1.5; }
 .log .error { color: #b3402a; }
+.log .activity { margin: 0; color: var(--color-ink-soft); font-style: italic; }
 .log-line { margin: 0 0 var(--space-3); }
 .log-line :deep(p) { margin: 0 0 var(--space-2); white-space: pre-wrap; }
 .log-line :deep(p:last-child) { margin-bottom: 0; }

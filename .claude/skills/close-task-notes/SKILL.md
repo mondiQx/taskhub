@@ -41,6 +41,18 @@ title, and body content:
 - If nothing matches clearly, don't force it — note in the queue that no
   target was found and let the user say where it should go instead.
 
+If the task has a `relatedMeeting` (frontmatter block, or the outcome is
+clearly the result of a specific calendar event even without that field —
+e.g. a review, training session, or sync whose recap belongs on the
+meeting itself), that meeting file is **always a target in addition to**
+any person/project note, not an alternative to one. Raymond reads meeting
+history in Obsidian expecting to see what actually happened when he
+clicks into a past meeting — a person note covering the same ground
+doesn't substitute for that. Find the meeting file under
+`vault/meetings/` (via `relatedMeeting.eventId`/title match, or
+`GET /api/vault/search`) and queue a recap entry for it alongside any
+note entry.
+
 ## Step 3 — queue for confirmation
 
 Don't write to `vault/notes/` directly. Append to
@@ -59,6 +71,13 @@ instead of a note link, so the user can supply one when reviewing (the
 Review Queue view disables its "Apply to note" button for these — only
 "Dismiss" works until a target is added by hand).
 
+For a meeting target, queue it as its own entry pointing at the meeting
+file, e.g.:
+
+```
+- [ ] <task title> → [[<meeting-id>]] (recap) — <one-line excerpt of what happened> — task:<task id>
+```
+
 Tell the user how many entries are waiting and roughly what they cover,
 and that they'll also see them in the app's Review Queue view.
 
@@ -74,6 +93,12 @@ append the excerpt to the target note, record the task id in
 `noteRouting.routed`, remove the line from the queue file (delete the
 file once empty), and append a line to
 `vault/tasks/_inbox/notes-decisions-log.md`.
+
+A meeting-targeted entry applies the same way except the heading: append
+a `## Recap — <task completedAt date>` section to the meeting file
+(matching the `## Recap — <date> (<source>)` sections already used for
+recurring-meeting notetaker recaps), not `## Updates` — that heading is
+for person/project notes only.
 
 ## Notes
 

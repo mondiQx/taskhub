@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { marked } from "marked";
+import DOMPurify from "dompurify";
 import type { Task, TaskPriority } from "../types";
 import { useTaskStore } from "../stores/taskStore";
 
@@ -38,6 +40,7 @@ const draftTags = ref<string[]>([]);
 
 const editTitle = ref("");
 const editBody = ref("");
+const isEditing = ref(false);
 
 watch(
   () => props.task,
@@ -46,8 +49,13 @@ watch(
       editTitle.value = t.title;
       editBody.value = t.body;
     }
+    isEditing.value = false;
   },
   { immediate: true },
+);
+
+const renderedBody = computed(() =>
+  props.task?.body ? DOMPurify.sanitize(marked.parse(props.task.body, { async: false })) : "",
 );
 
 watch(
@@ -208,76 +216,112 @@ function submitCreate() {
   <div class="backdrop" @click.self="emit('close')">
     <div class="panel">
       <button class="close" @click="emit('close')">×</button>
-      <h2 v-if="mode === 'edit'">
-        <input v-model="editTitle" class="title-input" @blur="onTitleBlur" @keydown.enter="($event.target as HTMLInputElement).blur()" />
-      </h2>
-      <h2 v-else>New task</h2>
 
-      <input
-        v-if="mode === 'create'"
-        v-model="draftTitle"
-        class="title-input create-title"
-        type="text"
-        placeholder="What needs doing?"
-        @keydown.enter="submitCreate"
-      />
-
-      <div class="tags">
-        <span v-for="tag in currentTags" :key="tag" class="tag">
-          {{ tag }}
-          <button class="tag-remove" @click="removeTag(tag)">×</button>
-        </span>
-        <div class="tag-input-wrap">
-          <input
-            v-model="tagDraft"
-            type="text"
-            class="tag-input"
-            placeholder="+ tag"
-            @input="onTagInput"
-            @focus="onTagInput"
-            @keydown="onTagKeydown"
-            @keydown.enter.prevent="onTagEnter"
-            @blur="showSuggestions = false; addTag()"
-          />
-          <ul v-if="showSuggestions && suggestions.length" class="tag-suggestions">
-            <li
-              v-for="(tag, i) in suggestions"
-              :key="tag"
-              :class="{ highlighted: i === highlightedIndex }"
-              @mousedown.prevent="selectSuggestion(tag)"
-            >
-              {{ tag }}
-            </li>
-          </ul>
+      <!-- Read-only view (default for an existing task) -->
+      <template v-if="mode === 'edit' && task && !isEditing">
+        <div class="read-header">
+          <h2>{{ task.title }}</h2>
+          <button class="edit-btn" @click="isEditing = true">Edit</button>
         </div>
-      </div>
 
-      <textarea
-        v-if="mode === 'create'"
-        v-model="draftBody"
-        class="body-input"
-        placeholder="Details (optional)"
-        rows="4"
-      ></textarea>
-      <textarea v-else v-model="editBody" class="body-input" rows="4" @blur="onBodyBlur"></textarea>
-
-      <div class="row">
-        <div class="field">
-          <label>Priority</label>
-          <select :value="mode === 'create' ? draftPriority : task?.priority" @change="onPriorityChange">
-            <option v-for="p in PRIORITIES" :key="p" :value="p">{{ p[0].toUpperCase() + p.slice(1) }}</option>
-          </select>
+        <div class="tags">
+          <span v-for="tag in task.tags" :key="tag" class="tag read-tag">{{ tag }}</span>
         </div>
-        <div class="field">
-          <label>Due date</label>
-          <div class="due-row">
-            <input type="date" :value="mode === 'create' ? draftDue : dueInputValue(task?.due ?? null)" @change="onDueChange" />
-            <button v-if="mode === 'edit' && task?.due" class="clear-due" @click="emit('setDue', task!.id, null)">Clear</button>
+
+        <div class="read-meta row">
+          <div class="field">
+            <label>Status</label>
+            <p class="read-value">{{ task.status }}</p>
+          </div>
+          <div class="field">
+            <label>Priority</label>
+            <p class="read-value">{{ task.priority[0].toUpperCase() + task.priority.slice(1) }}</p>
+          </div>
+          <div class="field">
+            <label>Due date</label>
+            <p class="read-value">{{ task.due ? new Date(task.due).toLocaleDateString() : "—" }}</p>
           </div>
         </div>
-      </div>
 
-      <template v-if="mode === 'edit' && task">
+        <div class="actions">
+          <button v-if="task.status !== 'done'" @click="emit('complete', task.id)">Mark done</button>
+          <button v-else @click="emit('reopen', task.id)">Reopen</button>
+        </div>
+
+        <div class="read-body" v-html="renderedBody"></div>
+
+        <h3>Discuss in meeting</h3>
+        <div v-if="task.relatedMeeting" class="meeting-link">
+          <span class="meeting-link-title">{{ task.relatedMeeting.title }}</span>
+          <span class="meeting-link-time">{{ new Date(task.relatedMeeting.start).toLocaleString() }}</span>
+        </div>
+        <p v-else class="hint">Not linked — drag this task's card onto a meeting in "Coming up" to link it.</p>
+
+        <h3>History</h3>
+        <ul class="history">
+          <li v-for="(h, i) in task.history" :key="i">
+            <strong>{{ h.event }}</strong> — {{ new Date(h.at).toLocaleString() }}
+            <span v-if="h.note">— {{ h.note }}</span>
+          </li>
+        </ul>
+
+        <p class="source">Source: {{ task.source.type }} <a v-if="task.source.url" :href="task.source.url" target="_blank">open</a></p>
+      </template>
+
+      <!-- Edit mode (existing task) -->
+      <template v-else-if="mode === 'edit' && task">
+        <h2>
+          <input v-model="editTitle" class="title-input" @blur="onTitleBlur" @keydown.enter="($event.target as HTMLInputElement).blur()" />
+        </h2>
+
+        <div class="tags">
+          <span v-for="tag in currentTags" :key="tag" class="tag">
+            {{ tag }}
+            <button class="tag-remove" @click="removeTag(tag)">×</button>
+          </span>
+          <div class="tag-input-wrap">
+            <input
+              v-model="tagDraft"
+              type="text"
+              class="tag-input"
+              placeholder="+ tag"
+              @input="onTagInput"
+              @focus="onTagInput"
+              @keydown="onTagKeydown"
+              @keydown.enter.prevent="onTagEnter"
+              @blur="showSuggestions = false; addTag()"
+            />
+            <ul v-if="showSuggestions && suggestions.length" class="tag-suggestions">
+              <li
+                v-for="(tag, i) in suggestions"
+                :key="tag"
+                :class="{ highlighted: i === highlightedIndex }"
+                @mousedown.prevent="selectSuggestion(tag)"
+              >
+                {{ tag }}
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <textarea v-model="editBody" class="body-input" rows="4" @blur="onBodyBlur"></textarea>
+
+        <div class="row">
+          <div class="field">
+            <label>Priority</label>
+            <select :value="task.priority" @change="onPriorityChange">
+              <option v-for="p in PRIORITIES" :key="p" :value="p">{{ p[0].toUpperCase() + p.slice(1) }}</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Due date</label>
+            <div class="due-row">
+              <input type="date" :value="dueInputValue(task.due)" @change="onDueChange" />
+              <button v-if="task.due" class="clear-due" @click="emit('setDue', task.id, null)">Clear</button>
+            </div>
+          </div>
+        </div>
+
         <div class="actions">
           <button v-if="task.status !== 'done'" @click="emit('complete', task.id)">Mark done</button>
           <button v-else @click="emit('reopen', task.id)">Reopen</button>
@@ -325,11 +369,75 @@ function submitCreate() {
             <span class="delete-hold-label">{{ holding ? "Keep holding…" : "Hold to delete" }}</span>
           </button>
         </div>
+
+        <div class="edit-done-actions">
+          <button class="submit" @click="isEditing = false">Done</button>
+        </div>
       </template>
 
-      <div v-else class="create-actions">
-        <button class="submit" @click="submitCreate">Add task</button>
-      </div>
+      <!-- Create mode -->
+      <template v-else>
+        <h2>New task</h2>
+
+        <input
+          v-model="draftTitle"
+          class="title-input create-title"
+          type="text"
+          placeholder="What needs doing?"
+          @keydown.enter="submitCreate"
+        />
+
+        <div class="tags">
+          <span v-for="tag in currentTags" :key="tag" class="tag">
+            {{ tag }}
+            <button class="tag-remove" @click="removeTag(tag)">×</button>
+          </span>
+          <div class="tag-input-wrap">
+            <input
+              v-model="tagDraft"
+              type="text"
+              class="tag-input"
+              placeholder="+ tag"
+              @input="onTagInput"
+              @focus="onTagInput"
+              @keydown="onTagKeydown"
+              @keydown.enter.prevent="onTagEnter"
+              @blur="showSuggestions = false; addTag()"
+            />
+            <ul v-if="showSuggestions && suggestions.length" class="tag-suggestions">
+              <li
+                v-for="(tag, i) in suggestions"
+                :key="tag"
+                :class="{ highlighted: i === highlightedIndex }"
+                @mousedown.prevent="selectSuggestion(tag)"
+              >
+                {{ tag }}
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <textarea v-model="draftBody" class="body-input" placeholder="Details (optional)" rows="4"></textarea>
+
+        <div class="row">
+          <div class="field">
+            <label>Priority</label>
+            <select :value="draftPriority" @change="onPriorityChange">
+              <option v-for="p in PRIORITIES" :key="p" :value="p">{{ p[0].toUpperCase() + p.slice(1) }}</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Due date</label>
+            <div class="due-row">
+              <input type="date" :value="draftDue" @change="onDueChange" />
+            </div>
+          </div>
+        </div>
+
+        <div class="create-actions">
+          <button class="submit" @click="submitCreate">Add task</button>
+        </div>
+      </template>
     </div>
   </div>
 </template>
@@ -496,6 +604,33 @@ h3 { font-weight: 600; font-size: 0.95rem; letter-spacing: -0.005em; }
 .delete-hold.holding { color: white; border-color: #b3261e; }
 .delete-hold-label { position: relative; z-index: 1; }
 .create-actions { margin-top: var(--space-4); display: flex; justify-content: flex-end; }
+.edit-done-actions { margin-top: var(--space-4); display: flex; justify-content: flex-end; }
+.read-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-2); }
+.read-header h2 { margin: 0; padding-right: 0; }
+.edit-btn {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 0.35rem var(--space-3);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 140ms var(--ease), border-color 140ms var(--ease);
+}
+.edit-btn:hover { background: rgba(var(--shadow-tint), 0.08); border-color: var(--color-accent); }
+.read-tag { cursor: default; }
+.read-meta { margin: var(--space-3) 0; }
+.read-value { margin: 0; font-size: 0.9rem; }
+.read-body {
+  font-size: 0.95rem;
+  line-height: 1.55;
+  margin: var(--space-2) 0 var(--space-4);
+}
+.read-body :deep(p) { margin: 0 0 var(--space-2); }
+.read-body :deep(ul), .read-body :deep(ol) { margin: 0 0 var(--space-2); padding-left: 1.25rem; }
+.read-body :deep(code) { background: rgba(var(--shadow-tint), 0.08); border-radius: 3px; padding: 0.1rem 0.3rem; font-size: 0.85em; }
+.read-body :deep(pre) { background: rgba(var(--shadow-tint), 0.06); padding: var(--space-2); border-radius: var(--radius-sm); overflow-x: auto; }
 .submit {
   background: var(--color-accent); color: white; border: none; border-radius: var(--radius-sm);
   padding: 0.5rem var(--space-4); cursor: pointer; font: inherit; font-weight: 500;
