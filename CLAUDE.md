@@ -142,9 +142,11 @@ connections. Run them individually via `/sync-gmail`, `/sync-jira`,
   Jira comment text for stalled tasks. **Never sends/posts automatically**
   — this is a deliberate safety boundary, not an oversight. Don't add an
   auto-send path without the user explicitly asking for it in writing.
-- `/morning` — runs sync-gmail → sync-jira → sync-calendar →
+- `/morning` — runs sync-gmail → sync-jira → sync-calendar → sync-slack →
   daily-briefing → draft-followups in sequence, so later steps see the
-  freshly-synced vault.
+  freshly-synced vault. The LaunchAgent runs this headlessly, so if Slack
+  MCP isn't authorized in that context, sync-slack reports that plainly
+  and the routine continues rather than aborting.
 - `/journal` (`journal` skill) — for a raw, mixed-topic brain dump (typed or
   dictated). Always writes the input verbatim to `vault/journal/<today>.md`
   first, then proposes extracted task updates/new tasks/meeting recaps via

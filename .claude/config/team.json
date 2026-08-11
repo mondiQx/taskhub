@@ -1,0 +1,12 @@
+{
+  "directReports": [
+    { "name": "Joseph Crispin Cruz", "jiraDisplayName": "Joseph Crispin Cruz", "slug": "joseph-cruz" },
+    { "name": "Adonis Jr Suico", "jiraDisplayName": "Adonis Jr Suico", "slug": "adonis-suico" },
+    { "name": "Cris Dismaya", "jiraDisplayName": "Cris Dismaya", "slug": "cris-dismaya" },
+    { "name": "Reggienel Patawaran", "jiraDisplayName": "Reggienel Patawaran", "slug": "reggienel-patawaran" }
+  ],
+  "hrSenderEmails": [
+    "hrdepartment@qstrike.com",
+    "qstrikeemployee@qstrike.com"
+  ]
+}

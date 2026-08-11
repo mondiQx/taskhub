@@ -34,6 +34,14 @@ after. See Step 2's verification pass for a second line of defense.
 
 ## Steps
 
+-1. **Load config.** Read `config.json` in this skill's own directory
+    (`directReportRoundup` and `scatteredInitiatives` — see Steps 2-4
+    below) and `.claude/config/team.json` (`directReports`, shared with
+    `sync-calendar`). Create either with empty defaults if missing and
+    say so in the summary. These are config to edit directly when the
+    roster or initiative list changes — don't hardcode names, project
+    keys, or thresholds into this file.
+
 0. **Load sync state.** Read `.data/sync-state.json` (repo root, not
    under `vault/` — bookkeeping only, already covered by the repo's
    `.data/` gitignore entry). Create it as `{}` if it doesn't exist yet.
@@ -93,28 +101,23 @@ after. See Step 2's verification pass for a second line of defense.
      recreate the file.
    - **Known scattered-initiative issues — recency check, every run, not
      just backfills.** Some work spans whichever project it happened to be
-     filed under, not one project key — currently known initiatives:
-     - **Analytics** (`GA-*`, `DSG-*`, and plain `CORE-*` have all hosted
-       it) — still active overall, so check per-issue, don't skip
-       wholesale. Identify by the issue's own summary starting with/
-       containing "Analytics" (`Core_Analytics`, `Core Analytics`,
-       `General Analytics`, `DSG Analytics`, etc.), **or** — for an
-       otherwise generic-looking subtask (e.g. `Dev: Dealer Page`, `API:
-       Visitors`) — its parent epic/story summary does.
-     - **Team Store** (`CORE-*`) — the whole initiative reads as dormant
-       (last touched ~early 2025, stuck in `FOR REFINEMENT`) — treat any
-       issue whose own or parent summary matches "Team Store"/
-       "Core_TeamStore" the same as a stale hit unless something concrete
-       says otherwise (recent update, active status).
-     For either: identify by content, not project prefix, checking the
-     parent epic/story when the issue itself doesn't obviously read as a
-     match. Skip creating a task only when the issue is both old and
-     dormant: `updated` more than ~60 days ago **and** current status/
-     latest comment shows no real activity (no in-progress work, no recent
-     comment, sitting in a testing/review/backlog limbo like `CORE PROD
-     TESTING`, `FOR PM VALIDATION`, `FOR REFINEMENT`, `UAT`, `ON HOLD`).
-     A recently-updated or currently-in-progress issue in either
-     initiative still gets a task exactly like any other project. Note
+     filed under, not one project key. Read `scatteredInitiatives` from
+     `config.json` in this skill's own directory (create the file with an
+     empty `scatteredInitiatives: []` if it doesn't exist yet, and say so
+     in the summary — this is config to edit directly, not a fixed list
+     to hardcode here). Each entry has a `name`, the `projectKeys` that
+     have hosted it, `matchSummaryContains` strings to identify an issue
+     by its own or parent epic/story summary, a `status` of `"active"` or
+     `"dormant"` (whether the whole initiative currently reads as live or
+     stuck), `dormantStatuses` (limbo statuses like testing/review/backlog
+     that don't count as real activity), and `dormantIfNoActivityWithinDays`.
+     For every entry: identify matching issues by summary content (own or
+     parent epic/story), not just project prefix. Skip creating a task
+     only when the issue is both old and dormant: `updated` older than the
+     entry's `dormantIfNoActivityWithinDays` **and** current status is one
+     of `dormantStatuses` with no real activity (no in-progress work, no
+     recent comment). A recently-updated or currently-in-progress issue in
+     any initiative still gets a task exactly like any other project. Note
      skipped-as-dormant issues in the summary (one line each, issue key +
      last-updated date) rather than silently dropping them.
    - Otherwise, gather everything needed for a **complete** task (see
@@ -152,9 +155,10 @@ open; conversely a recently-updated issue can already be resolved.
   project key, and check whether each individual issue is old-and-dormant
   rather than treating the whole initiative or a whole project as stale.
 - **Recognition/rewards signal**: if an issue or its comments show one of
-  the user's direct reports (Joseph Cruz, Adonis Suico, Cris Dismaya,
-  Reggienel Patawaran) resolving something notable, getting called out by
-  name in a comment, or otherwise being recognized — don't just skip it.
+  the user's direct reports (`directReports` in
+  `.claude/config/team.json`, shared with `sync-calendar`) resolving
+  something notable, getting called out by name in a comment, or
+  otherwise being recognized — don't just skip it.
   Add a short note to that person's `vault/notes/<person>.md` (what
   happened, when, source issue key) so it surfaces at EPEP review / 1:1
   time. Say in the summary who (if anyone) was found, even if no one was.
@@ -191,24 +195,27 @@ open; conversely a recently-updated issue can already be resolved.
 ## Step 4 — direct-report active-ticket roundup (live snapshot, not backfill)
 
 In addition to the user's own assigned issues, also check what's currently
-active for the user's direct reports (Joseph Cruz, Adonis Suico, Cris
-Dismaya, Reggienel Patawaran) — not to create tasks for their individual
-tickets (that's their work, not the user's), but to compile a per-person
-check-in list the user reviews at 1:1s.
+active for the user's direct reports (`directReports` in
+`.claude/config/team.json`, shared with `sync-calendar` — read it here
+too rather than hardcoding names) — not to create tasks for their
+individual tickets (that's their work, not the user's), but to compile a
+per-person check-in list the user reviews at 1:1s.
 
 This is a **live current-state snapshot**, not something to walk month by
 month during a backfill — "aging/active" is a question about right now.
 
-- JQL: `assignee in (<report accountIds>) AND project != GA AND status not
-  in ("Done", "Deferred", "INVALID/CANCELED", "INVALID") ORDER BY assignee
-  ASC, updated ASC`. Drop GA/analytics-project tickets entirely — they cycle
+- JQL: `assignee in (<report names/accountIds from team.json>) AND
+  project != <excludeProjectKeys from this skill's config.json
+  directReportRoundup> AND status not in (<excludeStatuses from the same
+  config>) ORDER BY assignee ASC, updated ASC`. Excluding those project
+  keys (analytics-project tickets by default) is deliberate — they cycle
   through UAT/testing constantly and aren't a useful signal for this.
 - **Drop genuinely dormant tickets, don't list them.** A ticket that hasn't
-  been updated in months (e.g. legacy CORE-2xxx tickets stuck in "CORE PROD
-  TESTING" since early-to-mid 2025) is bookkeeping debt, not something the
+  been updated within `directReportRoundup.dormantIfNoActivityWithinDays`
+  (this skill's `config.json`) is bookkeeping debt, not something the
   report is actively working — leave it out of the roundup entirely rather
-  than calling it out as a hygiene item. Only surface tickets with genuinely
-  recent activity (roughly the last 1-2 months).
+  than calling it out as a hygiene item. Only surface tickets with
+  genuinely recent activity.
 - For each direct report with at least one qualifying active ticket,
   maintain **one task per person**, dedup'd on
   `source.externalId: "direct-report-tickets:<person-slug>"` — update the

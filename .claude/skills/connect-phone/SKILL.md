@@ -15,6 +15,17 @@ both can run at the same time.
 Plist location: `~/Library/LaunchAgents/com.raymond.task-hub.server.plist`
 Logs: `/tmp/task-hub-server.stdout.log`, `/tmp/task-hub-server.stderr.log`
 
+## This skill does not pick up new code
+
+Restarting the LaunchAgent (`kickstart -k`) just re-execs the same
+`apps/server/dist/index.js` that's already on disk — it will keep serving
+whatever was last built, even after new commits land on `main`. If code
+actually changed (a merge to `main`, a fresh `git pull`), run **`/deploy`**
+instead: it rebuilds `apps/web/dist`/`apps/server/dist` and *then* restarts
+the LaunchAgent as its final step. Only reach for this skill on its own
+when no code changed — checking status, or starting/stopping/recovering
+the server after a reboot or crash.
+
 ## Determine intent
 
 Read the user's request and pick one of the actions below. Default to

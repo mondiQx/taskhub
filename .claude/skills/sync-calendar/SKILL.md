@@ -28,6 +28,12 @@ say so plainly and stop — don't fabricate calendar data.
 
 ## Steps
 
+-1. **Load shared team config.** Read `.claude/config/team.json`
+    (`directReports`, shared with `sync-jira`; `hrSenderEmails`, shared
+    with `sync-gmail`) — needed by Steps 3b/3c and 3e below. Don't
+    hardcode names or the HR address into this file; if the config is
+    missing, say so in the summary and skip the steps that depend on it.
+
 0. **Load sync state.** Read `.data/sync-state.json` (repo root, not
    under `vault/` — bookkeeping only, already covered by the repo's
    `.data/` gitignore entry). Create it as `{}` if it doesn't exist yet.
@@ -64,7 +70,14 @@ say so plainly and stop — don't fabricate calendar data.
    for a recurring series and should be linked from the series' cache file
    (see Step 3), not treated as a substitute for one.
 
-2. **Fetch events** via `calendar:range` for the window.
+2. **Fetch events** via `calendar:range` for the window. Each returned
+   event has a `status` field (`confirmed` or `cancelled`) — a cancelled
+   occurrence of a recurring series still comes back (the fetch requests
+   deleted/cancelled instances on purpose) instead of just vanishing from
+   the list. Treat any `status: "cancelled"` occurrence as **the** signal
+   for Step 3's cancellation handling below — don't rely on an occurrence
+   silently missing from the results to imply cancellation, since a gap
+   could just as easily mean "not in this window yet."
 
 3. **Cache each event** into `vault/meetings/YYYY-MM-DD-<slug>.md` if not
    already present: frontmatter with `title`, `date`/`start`/`end`,
@@ -93,13 +106,26 @@ say so plainly and stop — don't fabricate calendar data.
    "coming up soon" until caught by hand).
 
    Do this mechanically, don't eyeball the JSON array order: for a given
-   series, take every occurrence `calendar:range` returned for it, keep
-   only those with `start >= now`, and pick the one with the **minimum**
-   `start` — that occurrence's `id`/`start`/`end`/`attendees`/`htmlLink`/
-   `hangoutLink` go into the cache file's `eventId`/`date`/`start`/`end`/
-   `attendees`/`url`/`meetLink`. If you're not certain which fetched
-   occurrence is nearest, sort them by `start` ascending first — never
-   assume the API/tool output is already in that order.
+   series, take every occurrence `calendar:range` returned for it, drop
+   any with `status: "cancelled"` (handle those per the cancellation note
+   below instead), keep only those with `start >= now`, and pick the one
+   with the **minimum** `start` — that occurrence's `id`/`start`/`end`/
+   `attendees`/`htmlLink`/`hangoutLink` go into the cache file's
+   `eventId`/`date`/`start`/`end`/`attendees`/`url`/`meetLink`. If you're
+   not certain which fetched occurrence is nearest, sort them by `start`
+   ascending first — never assume the API/tool output is already in that
+   order.
+
+   **A cancelled occurrence is not just "skip it and move to the next
+   one."** When an occurrence in the window comes back
+   `status: "cancelled"`, append a one-line note to the series' `recurs`
+   field (e.g. `recurs: "Every Tuesday, 9:00 AM PHT; Aug 12 occurrence
+   cancelled"`) so the cache file itself reflects it, not just that run's
+   summary — the next sync (or a human reading the file) shouldn't have to
+   re-discover it. Call it out explicitly in the run summary too. If the
+   cancelled occurrence had a linked task via `relatedMeeting.eventId`,
+   don't delete that task (see Notes) — flag it in the summary so the user
+   can decide whether the prep is still needed.
 
    **Recurring events need a `recurs` field.** Because a recurring
    series's cache file gets its `date`/`start`/`end` overwritten to the
@@ -219,8 +245,9 @@ deciding something's stale.
 ## Step 3b — direct-report calendar signal (Raymond's calendar only)
 
 This skill only ever reads Raymond's own calendar — never pull a direct
-report's calendar directly. Signal about Joseph Cruz, Adonis Suico, Cris
-Dismaya, or Reggienel Patawaran comes only from events on *Raymond's*
+report's calendar directly. Signal about a direct report (`directReports`
+in `.claude/config/team.json`, shared with `sync-jira` — read it here
+too rather than hardcoding names) comes only from events on *Raymond's*
 calendar that they're also on (declines, no-shows, recurring 1:1s, etc.).
 
 Never create a `vault/tasks/` entry from this signal — it's their work,
@@ -298,14 +325,16 @@ changed").
 
 ## Step 3e — holiday awareness
 
-HR (`hrdepartment@qstrike.com`) sends a monthly "Holiday Announcement"
-email (subject often just "Holiday Announcement" or "`<Month>` Holiday")
-to `qstrikeemployee@qstrike.com`, roughly a month ahead of the month it
-covers, listing that month's regular/special-non-working holidays with
-specific dates. When the user asks about upcoming holidays, or as part
-of a periodic check:
+HR (the first address in `hrSenderEmails`, `.claude/config/team.json` —
+shared with `sync-gmail`, read it here too rather than hardcoding the
+address) sends a monthly "Holiday Announcement" email (subject often just
+"Holiday Announcement" or "`<Month>` Holiday") to the other address(es)
+in that same list, roughly a month ahead of the month it covers, listing
+that month's regular/special-non-working holidays with specific dates.
+When the user asks about upcoming holidays, or as part of a periodic
+check:
 
-1. Search Gmail: `from:hrdepartment@qstrike.com Holiday
+1. Search Gmail: `from:<hrSenderEmails[0]> Holiday
    after:<a date a bit before the window you care about>`. Read the
    full body (`get_thread`) — the holiday dates and names are in the
    message text, not just the snippet.
