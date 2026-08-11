@@ -20,6 +20,13 @@ a task outright), or **queue** (genuinely ambiguous — hold for the user to
 decide). Never silently guess between skip and create for something
 ambiguous — queue it instead.
 
+## Step -2 — load shared team config
+
+Read `.claude/config/team.json` (`hrSenderEmails`, shared with
+`sync-calendar`) — needed by Step 3's create-directly rule below. Don't
+hardcode the HR address into this file; if the config is missing, say so
+in the summary and fall back to treating no sender as auto-HR.
+
 ## Step -1 — load sync state
 
 Read `.data/sync-state.json` (repo root, not under `vault/` — it's
@@ -150,9 +157,11 @@ the summary beyond a count) when the thread is:
 
 **Create directly** (high enough confidence to skip the queue) when:
 
-- The thread is from `hrdepartment@qstrike.com` (or similar) about
-  attendance, cutoff reports, OB-requests, late check-ins, or anything that
-  affects pay or leave balance. These matter even when they look like pure
+- The thread is from an address in `hrSenderEmails`
+  (`.claude/config/team.json`, shared with `sync-calendar` — read it here
+  too rather than hardcoding the address) about attendance, cutoff
+  reports, OB-requests, late check-ins, or anything that affects pay or
+  leave balance. These matter even when they look like pure
   confirmations — an approved request or a late/missing-checkout notice is
   something the user wants tracked in case hours turn out wrong later.
   Priority `high` if it flags a problem (missed checkout, late check-in,

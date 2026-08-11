@@ -1,0 +1,17 @@
+{
+  "importantChannels": [
+    { "id": "C08R9DPCMA6", "name": "announcement-all" },
+    { "id": "C08F18SBJKS", "name": "developement-team-management" },
+    { "id": "C02HHAGPRL0", "name": "engineering_mgt_team" },
+    { "id": "C0674DJE2HH", "name": "engineering-managers" },
+    { "id": "C08EEB20J0K", "name": "software-dev-team-updates" },
+    { "id": "C08D0V5TWCD", "name": "qsi-specialized-team" },
+    { "id": "C08FRLXP8BS", "name": "general-analytics" },
+    { "id": "C049FFC08NN", "name": "seo-dna-general" },
+    { "id": "C0ANNNZDWHY", "name": "ai-project-team" }
+  ],
+  "excludedChannels": [
+    { "id": "C0620NFRFKL", "name": "group-dm-joseph-cris-reggie-adonis", "reason": "personal 5-person group DM, almost entirely banter/small talk, not work asks" },
+    { "id": "C0B6X0D8CSW", "name": "sre-triage", "reason": "SRE Triage Bot's automated Jira ticket-alert channel; those tickets are covered by sync-jira, duplicating them here fights the dedup rule" }
+  ]
+}

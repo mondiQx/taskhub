@@ -1,0 +1,25 @@
+{
+  "directReportRoundup": {
+    "excludeProjectKeys": ["GA"],
+    "excludeStatuses": ["Done", "Deferred", "INVALID/CANCELED", "INVALID"],
+    "dormantIfNoActivityWithinDays": 60
+  },
+  "scatteredInitiatives": [
+    {
+      "name": "Analytics",
+      "projectKeys": ["GA", "DSG", "CORE"],
+      "matchSummaryContains": ["Analytics", "Core_Analytics", "Core Analytics", "General Analytics", "DSG Analytics"],
+      "status": "active",
+      "dormantIfNoActivityWithinDays": 60,
+      "dormantStatuses": ["CORE PROD TESTING", "FOR PM VALIDATION", "FOR REFINEMENT", "UAT", "ON HOLD"]
+    },
+    {
+      "name": "Team Store",
+      "projectKeys": ["CORE"],
+      "matchSummaryContains": ["Team Store", "Core_TeamStore"],
+      "status": "dormant",
+      "dormantIfNoActivityWithinDays": 60,
+      "dormantStatuses": ["CORE PROD TESTING", "FOR PM VALIDATION", "FOR REFINEMENT", "UAT", "ON HOLD"]
+    }
+  ]
+}

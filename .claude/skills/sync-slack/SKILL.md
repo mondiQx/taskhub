@@ -127,6 +127,15 @@ if something meaningfully changed (a new reply in the thread), appending a
 
 ## Step 2 — search Slack
 
+Read `config.json` in this skill's own directory first — it holds
+`importantChannels` (channels whose messages get elevated to auto-create,
+see Step 3a) and `excludedChannels` (channels to skip searching entirely,
+each with a `reason`). Create it as `{ "importantChannels": [],
+"excludedChannels": [] }` if it doesn't exist yet, and say so in the
+summary. This is config, not vault content or bookkeeping — edit it
+directly (or ask the user to) rather than hardcoding channel IDs/names in
+this file or relying on a remembered preference.
+
 If a Slack MCP tool isn't already loaded, use ToolSearch (e.g.
 `search_messages`, `get_thread`, `list_channels` — verify actual names
 once the connector is authorized, see the note at the top). Search for:
@@ -136,6 +145,11 @@ once the connector is authorized, see the note at the top). Search for:
   if the connector exposes that as a distinct search.
 - Direct messages (1:1 DMs) where the last message is from the other
   person, i.e. awaiting the user's reply.
+
+For every result, drop it immediately without reading further if its
+channel ID matches an entry in `config.json`'s `excludedChannels` — don't
+categorize it, don't queue it, don't count it individually in the summary
+beyond a total "N messages skipped via excluded channels" line.
 
 Cover the last ~14 days unless the user gives a different range, or Step
 -1's narrowed window applies (the common case for a routine daily/morning
@@ -168,9 +182,12 @@ the summary beyond a count) when the message is:
 - The user has starred/saved the message themselves — that's an explicit
   signal they want it tracked, treat it the way Gmail's "starred" flag is
   treated.
-- The user has previously told you a specific sender's or channel's
-  messages on a topic are something they explicitly asked for or care
-  about (see Step 3a).
+- The channel is listed in `config.json`'s `importantChannels` (see Step
+  3a) and the message is a direct @mention or otherwise personally
+  relevant — not just any message in that channel.
+- The user has previously told you (in this conversation or a prior one)
+  that a specific sender's or topic's messages should always be created —
+  treat that as a standing rule for future runs too (see Step 3a).
 
 **Queue for confirmation** (append to the review file, see Step 4)
 everything else that doesn't clearly fit skip or create — most often:
@@ -185,15 +202,35 @@ everything else that doesn't clearly fit skip or create — most often:
 - Anything you're genuinely unsure about — when in doubt, queue, don't
   skip and don't create.
 
-### Step 3a — learned overrides
+### Step 3a — important channels and learned overrides
 
-If the user has told you (in this conversation or a prior one) that
-messages from a specific person, or about a specific topic/channel,
-should always be created or always be skipped — treat that as a standing
-rule for future runs, not a one-time judgment call. When you apply a
-learned override, say so in the summary (e.g. "created per your standing
-note that anything from Josh in #eng-alerts should become a task") so the
-user can correct it if it's drifted from what they meant.
+Channel-level scoping lives in `config.json` (see Step 2), not here — it's
+config, not something to memorize or hardcode into this file:
+
+- Messages in a channel listed under `importantChannels` get the benefit
+  of the doubt for create over queue when they're a direct @mention or
+  otherwise clearly personal, the same way a starred message would.
+  Being in an important channel doesn't by itself promote a channel-wide
+  FYI to create — Step 3's normal skip/create/queue logic still applies,
+  this just tips ambiguous cases toward create.
+  Messages from channels *not* in `importantChannels` still go through
+  the normal Step 3 logic — they're just not given that extra benefit of
+  the doubt, so a borderline case is more likely to land on queue instead
+  of create.
+- Channels listed under `excludedChannels` are dropped entirely in Step 2
+  — never reach this categorization step at all.
+- If the user asks to add/remove a channel from either list, edit
+  `config.json` directly rather than just remembering the request —
+  confirm the edit in your reply.
+
+Separately, if the user has told you (in this conversation or a prior
+one) that messages from a specific *person* or about a specific *topic*
+(not a whole channel) should always be created or always skipped, treat
+that as a standing rule for future runs too — that kind of preference
+doesn't have a config slot, so it's fine to carry it as a remembered
+override. When you apply one, say so in the summary (e.g. "created per
+your standing note that anything from Josh about deploys should become a
+task") so the user can correct it if it's drifted from what they meant.
 
 ### Step 3b — staleness override (backfills / wide date ranges)
 
