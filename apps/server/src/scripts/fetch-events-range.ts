@@ -39,6 +39,11 @@ async function main() {
     orderBy: "startTime",
     q,
     maxResults: 2500,
+    // Without this, a cancelled occurrence of a recurring series just
+    // disappears from the results instead of coming back with
+    // status: "cancelled" — the skill has no way to flag a cancellation
+    // it never sees.
+    showDeleted: true,
   });
 
   const events = (res.data.items ?? []).map((e) => ({
@@ -51,6 +56,7 @@ async function main() {
     htmlLink: e.htmlLink ?? null,
     hangoutLink: e.hangoutLink ?? null,
     recurringEventId: e.recurringEventId ?? null,
+    status: e.status ?? null,
   }));
 
   console.log(JSON.stringify(events, null, 2));

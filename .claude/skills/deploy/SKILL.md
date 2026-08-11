@@ -63,6 +63,12 @@ assume they're already done.
 
 ## Every deploy (after code changes)
 
+This whole flow is for when code actually changed — a merge landed on
+`main`, new commits need to go live. If the server just needs restarting
+with no code change (after a reboot, a crash, or a manual stop), use the
+`connect-phone` skill instead — it does the restart without redoing the
+build.
+
 1. **Confirm the working tree is clean and on `staging`** — deploy from
    `staging`, not directly from uncommitted `main` work. If the user asks
    to deploy from `main` instead, that's fine, but say so explicitly
