@@ -74,7 +74,18 @@ export interface NoteExcerptReviewItem {
   sourceFile: string;
 }
 
-export type ReviewItem = GmailReviewItem | NoteExcerptReviewItem;
+export interface SlackReviewItem {
+  kind: "slack";
+  id: string;
+  subject: string;
+  reason: string;
+  channel: string;
+  ts: string;
+  from: string;
+  sourceFile: string;
+}
+
+export type ReviewItem = GmailReviewItem | NoteExcerptReviewItem | SlackReviewItem;
 
 export interface JournalReviewItem {
   id: string;

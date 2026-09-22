@@ -8,6 +8,7 @@ import { appendUnderHeadingInFile } from "./noteAppend.js";
 export const inboxDir = path.join(config.vaultPath, "tasks", "_inbox");
 const decisionsLogFile = path.join(inboxDir, "gmail-decisions-log.md");
 const notesDecisionsLogFile = path.join(inboxDir, "notes-decisions-log.md");
+const slackDecisionsLogFile = path.join(inboxDir, "slack-decisions-log.md");
 const syncStateFile = path.join(config.dataPath, "sync-state.json");
 
 export interface GmailReviewItem {
@@ -30,13 +31,25 @@ export interface NoteExcerptReviewItem {
   sourceFile: string;
 }
 
-export type ReviewItem = GmailReviewItem | NoteExcerptReviewItem;
+export interface SlackReviewItem {
+  kind: "slack";
+  id: string;
+  subject: string;
+  reason: string;
+  channel: string;
+  ts: string;
+  from: string;
+  sourceFile: string;
+}
+
+export type ReviewItem = GmailReviewItem | NoteExcerptReviewItem | SlackReviewItem;
 
 export type ReviewChangeEvent = { type: "removed" | "reset"; id?: string; items?: ReviewItem[] };
 
 const GMAIL_LINE_RE = /^- \[([ x])\] (.+?) — (.+?) — thread:(\S+), from:(\S+)\s*$/;
 // `- [ ] <task title> → [[<note-id>]] — <excerpt> — task:<task id>` (or `→ (no match — needs a destination)`)
 const NOTE_LINE_RE = /^- \[([ x])\] (.+?) → (\[\[([^\]]+)\]\]|\(no match — needs a destination\)) — (.+?) — task:(\S+)\s*$/;
+const SLACK_LINE_RE = /^- \[([ x])\] (.+?) — (.+?) — slack:(\S+):(\S+), from:(\S+)\s*$/;
 
 function itemId(prefix: string, sourceFile: string, key: string): string {
   return `${prefix}:${path.basename(sourceFile)}::${key}`;
@@ -80,6 +93,16 @@ class ReviewQueueRepository extends EventEmitter {
             sourceFile,
           });
         }
+      } else if (/^slack-review-.*\.md$/.test(entry)) {
+        const sourceFile = path.join(inboxDir, entry);
+        const raw = await fs.readFile(sourceFile, "utf8");
+        for (const line of raw.split("\n")) {
+          const match = SLACK_LINE_RE.exec(line.trim());
+          if (!match) continue;
+          const [, checked, subject, reason, channel, ts, from] = match;
+          if (checked === "x") continue; // already queued for promotion by the skill; hide from the live list
+          items.push({ kind: "slack", id: itemId("slack", sourceFile, `${channel}:${ts}`), subject, reason, channel, ts, from, sourceFile });
+        }
       }
     }
     return items;
@@ -100,6 +123,21 @@ class ReviewQueueRepository extends EventEmitter {
     state.gmail ??= { lastRunAt: null, threads: {} };
     state.gmail.threads ??= {};
     state.gmail.threads[threadId] = { decision, at: new Date().toISOString() };
+    await fs.mkdir(config.dataPath, { recursive: true });
+    await fs.writeFile(syncStateFile, JSON.stringify(state, null, 2), "utf8");
+  }
+
+  /** Records the accept/reject decision in .data/sync-state.json so /sync-slack never re-queues this message. */
+  private async recordSlackDecisionInState(channel: string, ts: string, decision: "create" | "declined"): Promise<void> {
+    let state: any = {};
+    try {
+      state = JSON.parse(await fs.readFile(syncStateFile, "utf8"));
+    } catch {
+      // missing/corrupt state file — start fresh rather than blocking the decision
+    }
+    state.slack ??= { lastRunAt: null, messages: {} };
+    state.slack.messages ??= {};
+    state.slack.messages[`${channel}:${ts}`] = { decision, at: new Date().toISOString() };
     await fs.mkdir(config.dataPath, { recursive: true });
     await fs.writeFile(syncStateFile, JSON.stringify(state, null, 2), "utf8");
   }
@@ -156,10 +194,29 @@ class ReviewQueueRepository extends EventEmitter {
     await fs.writeFile(notesDecisionsLogFile, existing + line, "utf8");
   }
 
+  /** Appends a permanent, human-readable record of the decision — this is what "going back to it" shows. */
+  private async appendSlackDecisionLog(item: SlackReviewItem, decision: "accepted" | "declined", note?: string): Promise<void> {
+    const at = new Date().toISOString();
+    const checkbox = decision === "accepted" ? "[x]" : "[ ]";
+    const suffix = note ? `, ${note}` : "";
+    const line = `- ${checkbox} ${item.subject} — ${decision}${suffix} — slack:${item.channel}:${item.ts}, from:${item.from} — ${at}\n`;
+    let existing = "";
+    try {
+      existing = await fs.readFile(slackDecisionsLogFile, "utf8");
+    } catch {
+      existing =
+        "# Slack review decisions log\n\n" +
+        "Permanent record of every accept/reject decision made in the Review Queue view " +
+        "(or by hand-editing/deleting a line in a `slack-review-*.md` file). This file is " +
+        "never re-parsed as a pending queue — it's history only.\n\n";
+    }
+    await fs.writeFile(slackDecisionsLogFile, existing + line, "utf8");
+  }
+
   private async removeLine(item: ReviewItem): Promise<void> {
-    const lineRe = item.kind === "gmail" ? GMAIL_LINE_RE : NOTE_LINE_RE;
-    const idKey = item.kind === "gmail" ? item.threadId : item.taskId;
-    const idGroupIndex = item.kind === "gmail" ? 4 : 6;
+    const lineRe = item.kind === "gmail" ? GMAIL_LINE_RE : item.kind === "slack" ? SLACK_LINE_RE : NOTE_LINE_RE;
+    const idKey = item.kind === "gmail" ? item.threadId : item.kind === "slack" ? item.ts : item.taskId;
+    const idGroupIndex = item.kind === "gmail" ? 4 : item.kind === "slack" ? 5 : 6;
     const raw = await fs.readFile(item.sourceFile, "utf8");
     const lines = raw.split("\n").filter((line) => {
       const match = lineRe.exec(line.trim());
@@ -195,6 +252,23 @@ class ReviewQueueRepository extends EventEmitter {
       return;
     }
 
+    if (item.kind === "slack") {
+      const created = await taskRepository.create({
+        title: item.subject,
+        body: `${item.reason}\n\nFrom: ${item.from}`,
+        priority: "medium",
+        source: {
+          type: "slack",
+          externalId: `slack:${item.channel}:${item.ts}`,
+          url: null,
+        },
+      });
+      await this.removeLine(item);
+      await this.recordSlackDecisionInState(item.channel, item.ts, "create");
+      await this.appendSlackDecisionLog(item, "accepted", `created task ${created?.id ?? ""}`.trim());
+      return;
+    }
+
     if (!item.targetNoteId) {
       throw new Error("This item has no matched note — dismiss it and route the excerpt manually.");
     }
@@ -213,6 +287,12 @@ class ReviewQueueRepository extends EventEmitter {
       await this.removeLine(item);
       await this.recordDecisionInState(item.threadId, "declined");
       await this.appendDecisionLog(item, "declined");
+      return;
+    }
+    if (item.kind === "slack") {
+      await this.removeLine(item);
+      await this.recordSlackDecisionInState(item.channel, item.ts, "declined");
+      await this.appendSlackDecisionLog(item, "declined");
       return;
     }
     await this.removeLine(item);
