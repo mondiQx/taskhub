@@ -15,7 +15,7 @@ onMounted(() => store.init());
         <div class="body">
           <div class="subject">{{ item.subject }}</div>
           <div class="reason">{{ item.reason }}</div>
-          <div class="meta" v-if="item.kind === 'gmail'">from: {{ item.from }}</div>
+          <div class="meta" v-if="item.kind === 'gmail' || item.kind === 'slack'">from: {{ item.from }}</div>
           <div class="meta" v-else>
             → {{ item.targetNoteId ? item.targetNoteId : "no matching note found" }}
           </div>
@@ -26,7 +26,7 @@ onMounted(() => store.init());
             :disabled="item.kind === 'note-excerpt' && !item.targetNoteId"
             @click="store.promote(item.id)"
           >
-            {{ item.kind === "gmail" ? "Create task" : "Apply to note" }}
+            {{ item.kind === "gmail" || item.kind === "slack" ? "Create task" : "Apply to note" }}
           </button>
           <button class="dismiss" @click="store.dismiss(item.id)">Dismiss</button>
         </div>
